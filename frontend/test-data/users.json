@@ -1,0 +1,52 @@
+[
+  {
+    "id": "usr_001",
+    "name": "Anna Kowalski",
+    "email": "anna.kowalski@example.com",
+    "accountType": "individual",
+    "countryOfResidence": "Germany",
+    "kycStatus": "approved",
+    "accountStatus": "active",
+    "defaultCurrency": "EUR"
+  },
+  {
+    "id": "usr_002",
+    "name": "Acme Global Solutions Ltd",
+    "email": "finance@acmeglobal.co.uk",
+    "accountType": "business",
+    "countryOfResidence": "UK",
+    "kycStatus": "approved",
+    "accountStatus": "active",
+    "defaultCurrency": "GBP"
+  },
+  {
+    "id": "usr_003",
+    "name": "Tariq Al-Mansoor",
+    "email": "tariq.mansoor@example.ae",
+    "accountType": "individual",
+    "countryOfResidence": "UAE",
+    "kycStatus": "pending",
+    "accountStatus": "pending",
+    "defaultCurrency": "AED"
+  },
+  {
+    "id": "usr_004",
+    "name": "Jan Nowak",
+    "email": "jan.nowak@example.pl",
+    "accountType": "individual",
+    "countryOfResidence": "Poland",
+    "kycStatus": "approved",
+    "accountStatus": "active",
+    "defaultCurrency": "PLN"
+  },
+  {
+    "id": "usr_005",
+    "name": "Sarah Jenkins",
+    "email": "sarah.jenkins@example.com",
+    "accountType": "individual",
+    "countryOfResidence": "USA",
+    "kycStatus": "not_started",
+    "accountStatus": "pending",
+    "defaultCurrency": "USD"
+  }
+]

@@ -1,0 +1,38 @@
+[
+  {
+    "id": "wal_eur_01",
+    "currency": "EUR",
+    "balance": 2500,
+    "isDefault": true
+  },
+  {
+    "id": "wal_gbp_01",
+    "currency": "GBP",
+    "balance": 800,
+    "isDefault": false
+  },
+  {
+    "id": "wal_usd_01",
+    "currency": "USD",
+    "balance": 1200,
+    "isDefault": false
+  },
+  {
+    "id": "wal_aed_01",
+    "currency": "AED",
+    "balance": 4000,
+    "isDefault": false
+  },
+  {
+    "id": "wal_pln_01",
+    "currency": "PLN",
+    "balance": 2000,
+    "isDefault": false
+  },
+  {
+    "id": "wal_inr_01",
+    "currency": "INR",
+    "balance": 35000,
+    "isDefault": false
+  }
+]

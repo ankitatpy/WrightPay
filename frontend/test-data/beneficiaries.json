@@ -1,0 +1,31 @@
+[
+  {
+    "id": "ben_001",
+    "name": "Rajesh Sharma",
+    "currency": "INR",
+    "payoutMethod": "bank_account",
+    "accountNumber": "50100234567890",
+    "bankCode": "HDFC0001234",
+    "ifscCode": "HDFC0001234",
+    "bankName": "HDFC Bank"
+  },
+  {
+    "id": "ben_002",
+    "name": "Priya Patel",
+    "currency": "INR",
+    "payoutMethod": "upi",
+    "accountNumber": "priyapatel@okaxis",
+    "bankCode": "UPI-IND",
+    "upiId": "priyapatel@okaxis",
+    "bankName": "Axis UPI"
+  },
+  {
+    "id": "ben_003",
+    "name": "Marie Dubois",
+    "currency": "EUR",
+    "payoutMethod": "bank_account",
+    "accountNumber": "FR1420041010050500013M02606",
+    "bankCode": "BNPAFRPP",
+    "bankName": "BNP Paribas"
+  }
+]

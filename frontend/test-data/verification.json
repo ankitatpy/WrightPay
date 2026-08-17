@@ -1,0 +1,16 @@
+[
+  {
+    "email": "anna.kowalski@example.com",
+    "verificationCode": "123456",
+    "isVerified": true,
+    "createdAt": "2026-08-17T10:00:00Z",
+    "expiresAt": "2026-08-18T10:00:00Z"
+  },
+  {
+    "email": "test@example.com",
+    "verificationCode": "123456",
+    "isVerified": false,
+    "createdAt": "2026-08-17T11:00:00Z",
+    "expiresAt": "2026-08-18T11:00:00Z"
+  }
+]

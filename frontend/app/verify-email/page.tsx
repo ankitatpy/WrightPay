@@ -1,10 +1,54 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { verifyMockCode } from '@/lib/mock/auth';
 
 export default function VerifyEmailPage() {
+  const router = useRouter();
   const [code, setCode] = useState('');
+  const [email, setEmail] = useState<string>('');
+  const [error, setError] = useState<string>('');
+  const [resendSuccess, setResendSuccess] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const storedEmail = sessionStorage.getItem('wrightpay_signup_email');
+      if (storedEmail) {
+        setEmail(storedEmail);
+      }
+    }
+  }, []);
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setError('');
+
+    const trimmedCode = code.trim();
+    if (!trimmedCode) {
+      setError('Please enter the 6-digit verification code.');
+      return;
+    }
+
+    if (trimmedCode.length !== 6) {
+      setError('Verification code must be 6 digits.');
+      return;
+    }
+
+    const isValid = verifyMockCode(email || '', trimmedCode);
+    if (isValid) {
+      router.push('/onboarding');
+    } else {
+      setError('Invalid verification code. Please enter 123456 for testing.');
+    }
+  };
+
+  const handleResend = () => {
+    setResendSuccess(true);
+    setError('');
+    setTimeout(() => setResendSuccess(false), 4000);
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
@@ -28,11 +72,18 @@ export default function VerifyEmailPage() {
             </div>
             <h1 className="text-2xl font-bold text-slate-900">Verify your email</h1>
             <p className="text-slate-600 mt-2">
-              We've sent a verification code to your email address
+              {email ? (
+                <>
+                  We&apos;ve sent a verification code to{' '}
+                  <span className="font-medium text-slate-900">{email}</span>
+                </>
+              ) : (
+                <>We&apos;ve sent a verification code to your email address</>
+              )}
             </p>
           </div>
 
-          <form className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4" noValidate>
             <div>
               <label htmlFor="code" className="block text-sm font-medium text-slate-900 mb-2">
                 Verification code
@@ -40,20 +91,37 @@ export default function VerifyEmailPage() {
               <input
                 type="text"
                 id="code"
-                placeholder="000000"
+                name="code"
+                placeholder="123456"
                 maxLength={6}
                 value={code}
-                onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-center text-lg tracking-widest"
+                onChange={(e) => {
+                  setCode(e.target.value.replace(/\D/g, ''));
+                  if (error) setError('');
+                }}
+                className={`w-full px-4 py-2 bg-white text-slate-900 placeholder:text-slate-400 border ${
+                  error ? 'border-red-500' : 'border-slate-300'
+                } rounded-lg focus:outline-none focus:ring-2 ${
+                  error ? 'focus:ring-red-500' : 'focus:ring-blue-500'
+                } focus:border-transparent text-center text-lg tracking-widest`}
               />
-              <p className="text-xs text-slate-600 mt-2">
-                Check your email for a 6-digit code
+              {error && (
+                <p className="text-xs text-red-600 mt-2 text-center">{error}</p>
+              )}
+              <p className="text-xs text-slate-600 mt-2 text-center">
+                Check your email for a 6-digit code (use <span className="font-mono font-medium text-slate-800">123456</span> for testing)
               </p>
             </div>
 
+            {resendSuccess && (
+              <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-xs text-green-800 text-center">
+                A new verification code (123456) has been sent.
+              </div>
+            )}
+
             <button
               type="submit"
-              className="w-full bg-blue-600 text-white font-medium py-2 rounded-lg hover:bg-blue-700 transition-colors mt-6"
+              className="w-full bg-blue-600 text-white font-medium py-2 rounded-lg hover:bg-blue-700 transition-colors mt-6 cursor-pointer"
             >
               Verify email
             </button>
@@ -61,8 +129,12 @@ export default function VerifyEmailPage() {
 
           <div className="mt-6 pt-6 border-t border-slate-200 text-center">
             <p className="text-sm text-slate-600">
-              Didn't receive the code?{' '}
-              <button className="text-blue-600 font-medium hover:text-blue-700">
+              Didn&apos;t receive the code?{' '}
+              <button
+                type="button"
+                onClick={handleResend}
+                className="text-blue-600 font-medium hover:text-blue-700 cursor-pointer"
+              >
                 Resend
               </button>
             </p>

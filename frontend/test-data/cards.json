@@ -1,0 +1,18 @@
+[
+  {
+    "id": "crd_001",
+    "lastFourDigits": "4242",
+    "cardholderName": "Anna Kowalski",
+    "expiryDate": "12/28",
+    "status": "active",
+    "type": "debit"
+  },
+  {
+    "id": "crd_002",
+    "lastFourDigits": "0002",
+    "cardholderName": "Anna Kowalski",
+    "expiryDate": "04/26",
+    "status": "declined",
+    "type": "credit"
+  }
+]

@@ -1,0 +1,56 @@
+[
+  {
+    "from": "EUR",
+    "to": "INR",
+    "rate": 90.5,
+    "timestamp": "2026-08-17T12:00:00Z"
+  },
+  {
+    "from": "GBP",
+    "to": "INR",
+    "rate": 106.25,
+    "timestamp": "2026-08-17T12:00:00Z"
+  },
+  {
+    "from": "USD",
+    "to": "INR",
+    "rate": 83.4,
+    "timestamp": "2026-08-17T12:00:00Z"
+  },
+  {
+    "from": "AED",
+    "to": "INR",
+    "rate": 22.72,
+    "timestamp": "2026-08-17T12:00:00Z"
+  },
+  {
+    "from": "PLN",
+    "to": "INR",
+    "rate": 21.15,
+    "timestamp": "2026-08-17T12:00:00Z"
+  },
+  {
+    "from": "EUR",
+    "to": "GBP",
+    "rate": 0.85,
+    "timestamp": "2026-08-17T12:00:00Z"
+  },
+  {
+    "from": "EUR",
+    "to": "USD",
+    "rate": 1.09,
+    "timestamp": "2026-08-17T12:00:00Z"
+  },
+  {
+    "from": "EUR",
+    "to": "AED",
+    "rate": 4.0,
+    "timestamp": "2026-08-17T12:00:00Z"
+  },
+  {
+    "from": "EUR",
+    "to": "PLN",
+    "rate": 4.28,
+    "timestamp": "2026-08-17T12:00:00Z"
+  }
+]
