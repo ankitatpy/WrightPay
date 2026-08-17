@@ -117,4 +117,4 @@ ISC
 
 ## Notes
 
-This is a fictional project created for educational and portfolio purposes. All features, company names, and business logic are simulated and not intended to represent actual payment processing systems.
+This is a fictional project created by Ankit Pandey for educational and portfolio purposes. All features, company names, and business logic are simulated and not intended to represent actual payment processing systems.
