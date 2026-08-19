@@ -1,38 +1,37 @@
 [
   {
-    "id": "wal_eur_01",
+    "id": "wal_usr_001",
+    "userId": "usr_001",
     "currency": "EUR",
     "balance": 2500,
     "isDefault": true
   },
   {
-    "id": "wal_gbp_01",
+    "id": "wal_usr_002",
+    "userId": "usr_002",
     "currency": "GBP",
-    "balance": 800,
-    "isDefault": false
+    "balance": 15000,
+    "isDefault": true
   },
   {
-    "id": "wal_usd_01",
-    "currency": "USD",
-    "balance": 1200,
-    "isDefault": false
-  },
-  {
-    "id": "wal_aed_01",
+    "id": "wal_usr_003",
+    "userId": "usr_003",
     "currency": "AED",
-    "balance": 4000,
-    "isDefault": false
+    "balance": 8765.25,
+    "isDefault": true
   },
   {
-    "id": "wal_pln_01",
+    "id": "wal_usr_004",
+    "userId": "usr_004",
     "currency": "PLN",
-    "balance": 2000,
-    "isDefault": false
+    "balance": 12500,
+    "isDefault": true
   },
   {
-    "id": "wal_inr_01",
-    "currency": "INR",
-    "balance": 35000,
-    "isDefault": false
+    "id": "wal_usr_005",
+    "userId": "usr_005",
+    "currency": "USD",
+    "balance": 3450.75,
+    "isDefault": true
   }
 ]

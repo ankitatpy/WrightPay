@@ -84,9 +84,18 @@ export default function SignupPage() {
 
     if (result.success) {
       if (typeof window !== 'undefined') {
-        sessionStorage.setItem('wrightpay_signup_email', formData.email.trim());
+        try {
+          sessionStorage.setItem('wrightpay_signup_email', formData.email.trim());
+        } catch {
+          // Ignore sessionStorage errors
+        }
       }
       router.push('/verify-email');
+    } else {
+      setErrors((prev) => ({
+        ...prev,
+        email: result.message || 'An account with this email address already exists.',
+      }));
     }
   };
 

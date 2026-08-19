@@ -1,6 +1,7 @@
 [
   {
     "id": "crd_001",
+    "userId": "usr_001",
     "lastFourDigits": "4242",
     "cardholderName": "Anna Kowalski",
     "expiryDate": "12/28",
@@ -9,6 +10,7 @@
   },
   {
     "id": "crd_002",
+    "userId": "usr_001",
     "lastFourDigits": "0002",
     "cardholderName": "Anna Kowalski",
     "expiryDate": "04/26",

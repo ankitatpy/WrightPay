@@ -2,24 +2,24 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { verifyMockCode } from '@/lib/mock/auth';
 
 export default function VerifyEmailPage() {
   const router = useRouter();
   const [code, setCode] = useState('');
-  const [email, setEmail] = useState<string>('');
-  const [error, setError] = useState<string>('');
-  const [resendSuccess, setResendSuccess] = useState<boolean>(false);
-
-  useEffect(() => {
+  const [email] = useState<string>(() => {
     if (typeof window !== 'undefined') {
-      const storedEmail = sessionStorage.getItem('wrightpay_signup_email');
-      if (storedEmail) {
-        setEmail(storedEmail);
+      try {
+        return sessionStorage.getItem('wrightpay_signup_email') || '';
+      } catch {
+        return '';
       }
     }
-  }, []);
+    return '';
+  });
+  const [error, setError] = useState<string>('');
+  const [resendSuccess, setResendSuccess] = useState<boolean>(false);
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();

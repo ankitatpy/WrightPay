@@ -1,6 +1,7 @@
 [
   {
     "id": "tx_001",
+    "userId": "usr_001",
     "date": "2026-08-16",
     "recipient": "Rajesh Sharma",
     "senderAmount": 500.0,
@@ -16,6 +17,7 @@
   },
   {
     "id": "tx_002",
+    "userId": "usr_001",
     "date": "2026-08-15",
     "recipient": "Priya Patel",
     "senderAmount": 250.0,
@@ -31,6 +33,7 @@
   },
   {
     "id": "tx_003",
+    "userId": "usr_001",
     "date": "2026-08-14",
     "recipient": "Marie Dubois",
     "senderAmount": 1000.0,
@@ -46,6 +49,7 @@
   },
   {
     "id": "tx_004",
+    "userId": "usr_001",
     "date": "2026-08-13",
     "recipient": "Rajesh Sharma",
     "senderAmount": 1500.0,
@@ -62,6 +66,7 @@
   },
   {
     "id": "tx_005",
+    "userId": "usr_001",
     "date": "2026-08-12",
     "recipient": "Rajesh Sharma",
     "senderAmount": 2000.0,

@@ -1,6 +1,7 @@
 [
   {
     "id": "ben_001",
+    "userId": "usr_001",
     "name": "Rajesh Sharma",
     "currency": "INR",
     "payoutMethod": "bank_account",
@@ -11,6 +12,7 @@
   },
   {
     "id": "ben_002",
+    "userId": "usr_001",
     "name": "Priya Patel",
     "currency": "INR",
     "payoutMethod": "upi",
@@ -21,6 +23,7 @@
   },
   {
     "id": "ben_003",
+    "userId": "usr_001",
     "name": "Marie Dubois",
     "currency": "EUR",
     "payoutMethod": "bank_account",

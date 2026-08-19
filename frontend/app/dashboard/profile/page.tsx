@@ -1,14 +1,27 @@
 'use client';
 
+import { useSyncExternalStore } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
-import { mockUser } from '@/lib/mock-data';
+import { getCurrentMockUser } from '@/lib/mock/auth';
 import { useTheme } from '@/lib/theme-context';
 
+const subscribe = () => () => {};
+
 export default function ProfilePage() {
+  const isMounted = useSyncExternalStore(
+    subscribe,
+    () => true,
+    () => false
+  );
   const { theme, toggleTheme } = useTheme();
+  const user = getCurrentMockUser();
+
+  const nameParts = (isMounted ? user?.name || '' : '').trim().split(' ');
+  const firstName = nameParts[0] || '';
+  const lastName = nameParts.slice(1).join(' ') || '';
 
   return (
-    <DashboardLayout user={mockUser}>
+    <DashboardLayout user={user}>
       <div className="p-8 max-w-2xl">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Profile</h1>
@@ -20,12 +33,16 @@ export default function ProfilePage() {
           <div className="flex items-center gap-6 mb-6">
             <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center shadow-sm">
               <span className="text-2xl font-bold text-white">
-                {mockUser.name.charAt(0)}
+                {isMounted && user?.name ? user.name.charAt(0) : ''}
               </span>
             </div>
             <div>
-              <h2 className="text-2xl font-bold text-slate-900 dark:text-white">{mockUser.name}</h2>
-              <p className="text-slate-600 dark:text-slate-400">{mockUser.email}</p>
+              <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
+                {isMounted ? (user?.name || 'User') : ''}
+              </h2>
+              <p className="text-slate-600 dark:text-slate-400">
+                {isMounted ? user?.email : ''}
+              </p>
             </div>
           </div>
 
@@ -72,7 +89,8 @@ export default function ProfilePage() {
               <label className="block text-sm font-medium text-slate-900 dark:text-slate-200 mb-2">First Name</label>
               <input
                 type="text"
-                defaultValue="Anna"
+                key={user?.id + '-fn'}
+                defaultValue={firstName}
                 className="w-full px-4 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
@@ -80,7 +98,8 @@ export default function ProfilePage() {
               <label className="block text-sm font-medium text-slate-900 dark:text-slate-200 mb-2">Last Name</label>
               <input
                 type="text"
-                defaultValue="Kowalski"
+                key={user?.id + '-ln'}
+                defaultValue={lastName}
                 className="w-full px-4 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
@@ -88,16 +107,24 @@ export default function ProfilePage() {
               <label className="block text-sm font-medium text-slate-900 dark:text-slate-200 mb-2">Email</label>
               <input
                 type="email"
-                defaultValue={mockUser.email}
+                key={user?.id + '-email'}
+                defaultValue={isMounted ? user?.email || '' : ''}
                 className="w-full px-4 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-900 dark:text-slate-200 mb-2">Default Currency</label>
-              <select className="w-full px-4 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <option>{mockUser.defaultCurrency}</option>
-                <option>GBP</option>
-                <option>USD</option>
+              <select
+                key={user?.id + '-currency'}
+                defaultValue={isMounted ? user?.defaultCurrency || 'EUR' : 'EUR'}
+                className="w-full px-4 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="EUR">EUR</option>
+                <option value="GBP">GBP</option>
+                <option value="USD">USD</option>
+                <option value="AED">AED</option>
+                <option value="PLN">PLN</option>
+                <option value="INR">INR</option>
               </select>
             </div>
           </div>

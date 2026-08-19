@@ -13,16 +13,24 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>('light');
+  const [theme, setThemeState] = useState<Theme>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('wrightpay_theme') as Theme | null;
+        if (saved === 'dark' || saved === 'light') return saved;
+      } catch {
+        // Fallback
+      }
+    }
+    return 'light';
+  });
 
   useEffect(() => {
     try {
       const saved = localStorage.getItem('wrightpay_theme') as Theme | null;
       if (saved === 'dark') {
-        setThemeState('dark');
         document.documentElement.classList.add('dark');
       } else {
-        setThemeState('light');
         document.documentElement.classList.remove('dark');
       }
     } catch {

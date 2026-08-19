@@ -17,9 +17,9 @@ export default function WalletCard({ wallet }: WalletCardProps) {
       <div className="flex justify-between items-start mb-8">
         <div>
           <p className={`text-sm font-medium ${wallet.isDefault ? 'text-blue-100' : 'text-slate-600 dark:text-slate-400'}`}>
-            {wallet.isDefault ? 'Default Wallet' : 'Available'}
+            {wallet.isDefault ? 'Primary Balance' : 'Estimated Equivalent'}
           </p>
-          <p className="text-3xl font-bold mt-2 text-slate-900 dark:text-white">
+          <p className="text-3xl font-bold mt-2 text-slate-900 dark:text-white" suppressHydrationWarning>
             {formatCurrency(wallet.balance, wallet.currency)}
           </p>
         </div>
@@ -28,9 +28,13 @@ export default function WalletCard({ wallet }: WalletCardProps) {
         </div>
       </div>
 
-      {wallet.isDefault && (
+      {wallet.isDefault ? (
         <div className="pt-4 border-t border-blue-500">
-          <p className="text-xs text-blue-100">Primary currency for transfers</p>
+          <p className="text-xs text-blue-100">Primary funding currency</p>
+        </div>
+      ) : (
+        <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
+          <p className="text-xs text-slate-500 dark:text-slate-400">Converted at current market rate</p>
         </div>
       )}
     </div>

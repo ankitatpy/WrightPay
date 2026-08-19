@@ -17,10 +17,12 @@ export interface User {
   kycStatus: KycStatus;
   accountStatus?: AccountStatus;
   defaultCurrency: Currency;
+  mockPassword?: string;
 }
 
 export interface Wallet {
   id: string;
+  userId?: string;
   currency: Currency;
   balance: number;
   isDefault: boolean;
@@ -35,6 +37,7 @@ export type TransactionStatus =
 
 export interface Transaction<TStatus extends string = 'completed' | 'pending' | 'failed'> {
   id: string;
+  userId?: string;
   date: string;
   recipient: string;
   amount: number;
@@ -56,6 +59,7 @@ export type BeneficiaryPayoutMethod = 'bank_account' | 'upi';
 
 export interface Beneficiary {
   id: string;
+  userId?: string;
   name: string;
   currency: Currency;
   payoutMethod?: BeneficiaryPayoutMethod;
@@ -66,12 +70,15 @@ export interface Beneficiary {
   bankName?: string;
 }
 
+export type CardStatus = 'active' | 'frozen' | 'deactivated' | 'declined' | 'pending';
+
 export interface Card {
   id: string;
+  userId?: string;
   lastFourDigits: string;
   cardholderName: string;
   expiryDate: string;
-  status: 'active' | 'declined' | 'pending';
+  status: CardStatus;
   type: 'debit' | 'credit';
 }
 

@@ -1,26 +1,40 @@
 'use client';
 
+import { useSyncExternalStore } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import StatusBadge from '@/components/StatusBadge';
-import { mockUser, mockTransactions } from '@/lib/mock-data';
+import { getCurrentMockUser } from '@/lib/mock/auth';
+import { getUserTransactions } from '@/lib/mock/transactions';
 import { formatCurrency, formatDate } from '@/lib/formatting';
 import { useState } from 'react';
 
+const subscribe = () => () => {};
+
 export default function TransactionsPage() {
+  const isMounted = useSyncExternalStore(
+    subscribe,
+    () => true,
+    () => false
+  );
+
+  const user = getCurrentMockUser();
+  const userTransactions = isMounted ? getUserTransactions(user?.id) : [];
+
   const [statusFilter, setStatusFilter] = useState<'all' | 'completed' | 'pending' | 'failed'>(
     'all'
   );
   const [searchReference, setSearchReference] = useState('');
 
-  const filteredTransactions = mockTransactions.filter((tx) => {
-    const matchesStatus = statusFilter === 'all' || tx.status === statusFilter;
+  const filteredTransactions = userTransactions.filter((tx) => {
+    const matchesStatus =
+      statusFilter === 'all' || tx.status.toLowerCase() === statusFilter.toLowerCase();
     const matchesSearch =
       searchReference === '' || tx.reference.toLowerCase().includes(searchReference.toLowerCase());
     return matchesStatus && matchesSearch;
   });
 
   return (
-    <DashboardLayout user={mockUser}>
+    <DashboardLayout user={user}>
       <div className="p-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Transactions</h1>
@@ -57,7 +71,7 @@ export default function TransactionsPage() {
               </label>
               <input
                 type="text"
-                placeholder="WP-20240815-001"
+                placeholder="WP-20260816-001"
                 value={searchReference}
                 onChange={(e) => setSearchReference(e.target.value)}
                 className="w-full px-4 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-slate-400"
@@ -96,7 +110,7 @@ export default function TransactionsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                {filteredTransactions.length > 0 ? (
+                {isMounted && filteredTransactions.length > 0 ? (
                   filteredTransactions.map((tx) => (
                     <tr key={tx.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
                       <td className="px-6 py-4 text-sm text-slate-900 dark:text-slate-200">
@@ -120,10 +134,18 @@ export default function TransactionsPage() {
                       </td>
                     </tr>
                   ))
-                ) : (
+                ) : isMounted ? (
                   <tr>
                     <td colSpan={7} className="px-6 py-12 text-center text-slate-600 dark:text-slate-400">
                       No transactions found
+                    </td>
+                  </tr>
+                ) : (
+                  <tr>
+                    <td colSpan={7} className="px-6 py-8 text-center text-slate-400">
+                      <div className="animate-pulse flex justify-center py-4">
+                        <div className="h-4 w-48 bg-slate-200 dark:bg-slate-800 rounded" />
+                      </div>
                     </td>
                   </tr>
                 )}

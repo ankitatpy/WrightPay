@@ -1,12 +1,26 @@
 'use client';
 
+import { useSyncExternalStore } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import WalletCard from '@/components/WalletCard';
-import { mockUser, mockWallets } from '@/lib/mock-data';
+import { getCurrentMockUser } from '@/lib/mock/auth';
+import { getUserWallet, getCurrencyEquivalents } from '@/lib/mock/wallets';
+
+const subscribe = () => () => {};
 
 export default function WalletsPage() {
+  const isMounted = useSyncExternalStore(
+    subscribe,
+    () => true,
+    () => false
+  );
+
+  const user = getCurrentMockUser();
+  const userWallet = getUserWallet(user);
+  const currencyEquivalents = getCurrencyEquivalents(userWallet);
+
   return (
-    <DashboardLayout user={mockUser}>
+    <DashboardLayout user={user}>
       <div className="p-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Your Wallets</h1>
@@ -16,11 +30,18 @@ export default function WalletsPage() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {mockWallets.map((wallet) => (
-            <div key={wallet.id}>
-              <WalletCard wallet={wallet} />
-            </div>
-          ))}
+          {isMounted
+            ? currencyEquivalents.map((wallet) => (
+                <div key={wallet.id}>
+                  <WalletCard wallet={wallet} />
+                </div>
+              ))
+            : Array.from({ length: 6 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="rounded-lg p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm animate-pulse h-36"
+                />
+              ))}
         </div>
 
         {/* Placeholder for future features */}
