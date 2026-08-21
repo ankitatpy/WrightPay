@@ -5,6 +5,8 @@ import {
   ForbiddenException,
   Logger,
 } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import { DataSource } from 'typeorm';
 import * as crypto from 'crypto';
 import { CreateTransferDto } from './dto/create-transfer.dto';
@@ -15,6 +17,7 @@ import { ExchangeRatesService } from '../exchange-rates/exchange-rates.service';
 import { IdempotencyService } from './services/idempotency.service';
 import { User, AccountStatus } from '../users/entities/user.entity';
 import { Currency } from '../../core/enums/currency.enum';
+import { TRANSFERS_QUEUE, PROCESS_TRANSFER_JOB } from './constants/transfers.constants';
 
 export const TRANSFER_FEE = 25.0; // 25 units fixed transfer fee
 
@@ -41,6 +44,8 @@ export class TransfersService {
     private readonly dataSource: DataSource,
     private readonly exchangeRatesService: ExchangeRatesService,
     private readonly idempotencyService: IdempotencyService,
+    @InjectQueue(TRANSFERS_QUEUE)
+    private readonly transfersQueue: Queue,
   ) {}
 
   generateReference(): string {
@@ -75,6 +80,8 @@ export class TransfersService {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
+
+    let savedTransaction: Transaction;
 
     try {
       // 1. Verify user status
@@ -162,25 +169,10 @@ export class TransfersService {
         date: new Date(),
       });
 
-      const savedTransaction = await queryRunner.manager.save(transaction);
+      savedTransaction = await queryRunner.manager.save(transaction);
 
-      // 8. Commit atomic transaction
+      // 8. Commit atomic PostgreSQL transaction
       await queryRunner.commitTransaction();
-
-      return {
-        id: savedTransaction.id,
-        reference: savedTransaction.reference,
-        status: savedTransaction.status,
-        recipient: savedTransaction.recipient,
-        sendAmount: Number(savedTransaction.senderAmount),
-        sourceCurrency: savedTransaction.senderCurrency,
-        recipientAmount: Number(savedTransaction.recipientAmount),
-        destinationCurrency: savedTransaction.recipientCurrency,
-        fee: Number(savedTransaction.fee),
-        exchangeRate: Number(savedTransaction.exchangeRate),
-        date: savedTransaction.date,
-        createdAt: savedTransaction.createdAt,
-      };
     } catch (error) {
       if (queryRunner.isTransactionActive) {
         await queryRunner.rollbackTransaction();
@@ -190,5 +182,47 @@ export class TransfersService {
     } finally {
       await queryRunner.release();
     }
+
+    // 9. Enqueue BullMQ job ONLY AFTER database commit succeeded
+    try {
+      await this.transfersQueue.add(
+        PROCESS_TRANSFER_JOB,
+        { transactionId: savedTransaction.id },
+        {
+          jobId: `transfer-${savedTransaction.id}`,
+          removeOnComplete: true,
+          removeOnFail: false,
+          attempts: 3,
+          backoff: {
+            type: 'exponential',
+            delay: 1000,
+          },
+        },
+
+      );
+      this.logger.log(
+        `Enqueued BullMQ job transfer-${savedTransaction.id} for transaction ${savedTransaction.id}`,
+      );
+    } catch (queueError) {
+      this.logger.error(
+        `Failed to enqueue BullMQ transfer job for transaction ${savedTransaction.id}: ${queueError.message}`,
+        queueError.stack,
+      );
+    }
+
+    return {
+      id: savedTransaction.id,
+      reference: savedTransaction.reference,
+      status: savedTransaction.status,
+      recipient: savedTransaction.recipient,
+      sendAmount: Number(savedTransaction.senderAmount),
+      sourceCurrency: savedTransaction.senderCurrency,
+      recipientAmount: Number(savedTransaction.recipientAmount),
+      destinationCurrency: savedTransaction.recipientCurrency,
+      fee: Number(savedTransaction.fee),
+      exchangeRate: Number(savedTransaction.exchangeRate),
+      date: savedTransaction.date,
+      createdAt: savedTransaction.createdAt,
+    };
   }
 }
