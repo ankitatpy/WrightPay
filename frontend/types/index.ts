@@ -28,16 +28,31 @@ export interface Wallet {
   isDefault: boolean;
 }
 
+export interface WalletResponse {
+  id: string;
+  currency: Currency;
+  balance: number;
+  isDefault: boolean;
+  equivalents: Record<Currency, number>;
+}
+
+
 export type TransactionStatus =
   | 'PENDING'
   | 'PROCESSING'
   | 'COMPLETED'
   | 'FAILED'
-  | 'SUSPICIOUS';
+  | 'SUSPICIOUS'
+  | 'pending'
+  | 'processing'
+  | 'completed'
+  | 'failed'
+  | 'suspicious';
 
-export interface Transaction<TStatus extends string = 'completed' | 'pending' | 'failed'> {
+export interface Transaction<TStatus extends string = TransactionStatus> {
   id: string;
   userId?: string;
+  reference: string;
   date: string;
   recipient: string;
   amount: number;
@@ -49,7 +64,6 @@ export interface Transaction<TStatus extends string = 'completed' | 'pending' | 
   fee: number;
   exchangeRate: number;
   status: TStatus;
-  reference: string;
   failureReason?: string;
 }
 
@@ -83,11 +97,22 @@ export interface Card {
 }
 
 export interface ExchangeRate {
+  id?: string;
   from: Currency;
   to: Currency;
   rate: number;
-  timestamp: string;
+  timestamp?: string;
+  createdAt?: string;
 }
+
+export interface ExchangeQuote {
+  from: Currency;
+  to: Currency;
+  amount: number;
+  rate: number;
+  convertedAmount: number;
+}
+
 
 export interface VerificationRecord {
   email: string;

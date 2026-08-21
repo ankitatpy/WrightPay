@@ -1,29 +1,23 @@
 'use client';
 
-import { useSyncExternalStore, useState } from 'react';
+import { useEffect, useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
-import { getCurrentMockUser } from '@/lib/mock/auth';
+import { useAuth } from '@/lib/auth-context';
 import {
-  getUserCards,
-  addMockCard,
+  getCards,
+  createCard,
   freezeCard,
   unfreezeCard,
   deactivateCard,
   deleteCard,
-} from '@/lib/mock/cards';
+} from '@/lib/api/cards';
 import { Card } from '@/types';
 
-const subscribe = () => () => {};
-
 export default function CardsPage() {
-  const isMounted = useSyncExternalStore(
-    subscribe,
-    () => true,
-    () => false
-  );
-
-  const user = getCurrentMockUser();
-  const [refreshKey, setRefreshKey] = useState(0);
+  const { user } = useAuth();
+  const [cards, setCards] = useState<Card[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [pageError, setPageError] = useState<string | null>(null);
 
   // Modal State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -34,11 +28,51 @@ export default function CardsPage() {
   const [expiryYear, setExpiryYear] = useState('28');
   const [cvv, setCvv] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
   // Deactivate Confirmation Modal State
   const [deactivatingCard, setDeactivatingCard] = useState<Card | null>(null);
 
-  const cards = isMounted ? getUserCards(user?.id) : [];
+  const fetchCards = () => {
+    setIsLoading(true);
+    setPageError(null);
+    getCards()
+      .then((data) => {
+        setCards(Array.isArray(data) ? data : []);
+        setIsLoading(false);
+      })
+      .catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : 'Failed to load cards';
+        setPageError(message);
+        setIsLoading(false);
+      });
+  };
+
+  useEffect(() => {
+    if (!user) return;
+    let isCancelled = false;
+
+    getCards()
+      .then((data) => {
+        if (!isCancelled) {
+          setCards(Array.isArray(data) ? data : []);
+          setIsLoading(false);
+        }
+      })
+      .catch((err: unknown) => {
+        if (!isCancelled) {
+          const message = err instanceof Error ? err.message : 'Failed to load cards';
+          setPageError(message);
+          setIsLoading(false);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [user]);
+
 
   const handleOpenAddModal = () => {
     setCardholderName(user?.name || '');
@@ -56,9 +90,9 @@ export default function CardsPage() {
     setFormError(null);
   };
 
-  const handleAddCardSubmit = (e: React.FormEvent) => {
+  const handleAddCardSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
+    if (!user || isSubmitting) return;
 
     if (!cardholderName.trim()) {
       setFormError('Please enter the cardholder name.');
@@ -78,39 +112,74 @@ export default function CardsPage() {
 
     const expiryDate = `${expiryMonth.padStart(2, '0')}/${expiryYear.slice(-2)}`;
 
-    addMockCard({
-      userId: user.id,
-      cardholderName: cardholderName.trim(),
-      type: cardType,
-      lastFourDigits: cleanNumber.slice(-4),
-      expiryDate,
-    });
+    try {
+      setIsSubmitting(true);
+      setFormError(null);
 
-    setRefreshKey((prev) => prev + 1);
-    setIsAddModalOpen(false);
-  };
+      await createCard({
+        cardholderName: cardholderName.trim(),
+        type: cardType,
+        cardNumber: cleanNumber,
+        expiryDate,
+        cvv: cvv.trim(),
+      });
 
-  const handleToggleFreeze = (card: Card) => {
-    if (!user) return;
-    if (card.status === 'active') {
-      freezeCard(user.id, card.id);
-    } else if (card.status === 'frozen') {
-      unfreezeCard(user.id, card.id);
+      fetchCards();
+      setIsAddModalOpen(false);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to create card';
+      setFormError(message);
+    } finally {
+      setIsSubmitting(false);
     }
-    setRefreshKey((prev) => prev + 1);
   };
 
-  const handleConfirmDeactivate = () => {
-    if (!user || !deactivatingCard) return;
-    deactivateCard(user.id, deactivatingCard.id);
-    setDeactivatingCard(null);
-    setRefreshKey((prev) => prev + 1);
+  const handleToggleFreeze = async (card: Card) => {
+    if (!user || actionLoadingId) return;
+    try {
+      setActionLoadingId(card.id);
+      if (card.status === 'active') {
+        const updated = await freezeCard(card.id);
+        setCards((prev) => prev.map((c) => (c.id === card.id ? updated : c)));
+      } else if (card.status === 'frozen') {
+        const updated = await unfreezeCard(card.id);
+        setCards((prev) => prev.map((c) => (c.id === card.id ? updated : c)));
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to update card status';
+      setPageError(message);
+    } finally {
+      setActionLoadingId(null);
+    }
   };
 
-  const handleDelete = (cardId: string) => {
-    if (!user) return;
-    deleteCard(user.id, cardId);
-    setRefreshKey((prev) => prev + 1);
+  const handleConfirmDeactivate = async () => {
+    if (!user || !deactivatingCard || actionLoadingId) return;
+    try {
+      setActionLoadingId(deactivatingCard.id);
+      const updated = await deactivateCard(deactivatingCard.id);
+      setCards((prev) => prev.map((c) => (c.id === deactivatingCard.id ? updated : c)));
+      setDeactivatingCard(null);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to deactivate card';
+      setPageError(message);
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const handleDelete = async (cardId: string) => {
+    if (!user || actionLoadingId) return;
+    try {
+      setActionLoadingId(cardId);
+      await deleteCard(cardId);
+      setCards((prev) => prev.filter((c) => c.id !== cardId));
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to delete card';
+      setPageError(message);
+    } finally {
+      setActionLoadingId(null);
+    }
   };
 
   const formatCardInputNumber = (val: string) => {
@@ -118,17 +187,37 @@ export default function CardsPage() {
     return raw.replace(/(\d{4})(?=\d)/g, '$1 ');
   };
 
+
   return (
     <DashboardLayout user={user}>
-      <div className="p-8" key={refreshKey}>
+      <div className="p-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Cards</h1>
           <p className="text-slate-600 dark:text-slate-400 mt-2">Manage your payment cards</p>
         </div>
 
+        {/* Page Error Banner */}
+        {pageError && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <svg className="w-5 h-5 text-red-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span>{pageError}</span>
+            </div>
+            <button
+              type="button"
+              onClick={fetchCards}
+              className="text-xs font-semibold px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-800 rounded transition-colors cursor-pointer"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
         {/* Visual Cards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {isMounted && cards.length > 0 ? (
+          {!isLoading && cards.length > 0 ? (
             cards.map((card) => (
               <div
                 key={card.id}
@@ -175,7 +264,7 @@ export default function CardsPage() {
                 </div>
               </div>
             ))
-          ) : isMounted ? (
+          ) : !isLoading ? (
             <div className="col-span-2 bg-white dark:bg-slate-900 rounded-lg p-8 text-center border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400">
               No payment cards saved yet. Click below to add a card.
             </div>
@@ -188,7 +277,7 @@ export default function CardsPage() {
         </div>
 
         {/* Card Details & Management Controls */}
-        {isMounted && cards.length > 0 && (
+        {!isLoading && cards.length > 0 && (
           <div className="mt-8 space-y-4">
             <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Card Management</h2>
             {cards.map((card) => (
@@ -225,15 +314,17 @@ export default function CardsPage() {
                     <>
                       <button
                         type="button"
+                        disabled={actionLoadingId === card.id}
                         onClick={() => handleToggleFreeze(card)}
-                        className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors text-sm cursor-pointer"
+                        className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors text-sm cursor-pointer disabled:opacity-50"
                       >
-                        ❄️ Freeze Card
+                        {actionLoadingId === card.id ? 'Updating...' : '❄️ Freeze Card'}
                       </button>
                       <button
                         type="button"
+                        disabled={actionLoadingId === card.id}
                         onClick={() => setDeactivatingCard(card)}
-                        className="px-4 py-2 bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-400 font-medium rounded-lg hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors text-sm cursor-pointer"
+                        className="px-4 py-2 bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-400 font-medium rounded-lg hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors text-sm cursor-pointer disabled:opacity-50"
                       >
                         Deactivate
                       </button>
@@ -244,15 +335,17 @@ export default function CardsPage() {
                     <>
                       <button
                         type="button"
+                        disabled={actionLoadingId === card.id}
                         onClick={() => handleToggleFreeze(card)}
-                        className="px-4 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors text-sm cursor-pointer"
+                        className="px-4 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors text-sm cursor-pointer disabled:opacity-50"
                       >
-                        ⚡ Unfreeze Card
+                        {actionLoadingId === card.id ? 'Updating...' : '⚡ Unfreeze Card'}
                       </button>
                       <button
                         type="button"
+                        disabled={actionLoadingId === card.id}
                         onClick={() => setDeactivatingCard(card)}
-                        className="px-4 py-2 bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-400 font-medium rounded-lg hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors text-sm cursor-pointer"
+                        className="px-4 py-2 bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-400 font-medium rounded-lg hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors text-sm cursor-pointer disabled:opacity-50"
                       >
                         Deactivate
                       </button>
@@ -281,10 +374,11 @@ export default function CardsPage() {
 
                   <button
                     type="button"
+                    disabled={actionLoadingId === card.id}
                     onClick={() => handleDelete(card.id)}
-                    className="px-4 py-2 border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400 font-medium rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors text-sm cursor-pointer ml-auto"
+                    className="px-4 py-2 border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400 font-medium rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors text-sm cursor-pointer ml-auto disabled:opacity-50"
                   >
-                    Remove
+                    {actionLoadingId === card.id ? 'Removing...' : 'Remove'}
                   </button>
                 </div>
               </div>
@@ -293,7 +387,7 @@ export default function CardsPage() {
         )}
 
         {/* Add Card Card */}
-        {isMounted && (
+        {!isLoading && (
           <div className="mt-8 bg-blue-50 dark:bg-blue-950/30 border-2 border-dashed border-blue-300 dark:border-blue-800/80 rounded-lg p-6 text-center transition-colors">
             <svg
               className="w-12 h-12 text-blue-600 dark:text-blue-400 mx-auto mb-3"
@@ -321,6 +415,7 @@ export default function CardsPage() {
             </button>
           </div>
         )}
+
 
         {/* Add Card Modal */}
         {isAddModalOpen && (

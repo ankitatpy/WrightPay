@@ -1,11 +1,11 @@
 'use client';
 
 import DashboardLayout from '@/components/DashboardLayout';
-import { mockUser } from '@/lib/mock-data';
 
 export default function CompliancePage() {
   return (
-    <DashboardLayout user={mockUser}>
+    <DashboardLayout>
+
       <div className="p-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-slate-900">Compliance Dashboard</h1>

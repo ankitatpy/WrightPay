@@ -3,10 +3,11 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { mockSignup } from '@/lib/mock/auth';
+import { useAuth } from '@/lib/auth-context';
 
 export default function SignupPage() {
   const router = useRouter();
+  const { signup } = useAuth();
 
   const [formData, setFormData] = useState({
     firstName: '',
@@ -18,6 +19,7 @@ export default function SignupPage() {
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [isLoading, setIsLoading] = useState(false);
 
   const validate = () => {
     const newErrors: Record<string, string> = {};
@@ -38,6 +40,8 @@ export default function SignupPage() {
 
     if (!formData.password) {
       newErrors.password = 'Password is required';
+    } else if (formData.password.length < 8) {
+      newErrors.password = 'Password must be at least 8 characters';
     }
 
     if (!formData.confirmPassword) {
@@ -65,7 +69,7 @@ export default function SignupPage() {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const validationErrors = validate();
 
@@ -74,13 +78,16 @@ export default function SignupPage() {
       return;
     }
 
-    // Call mock auth service
-    const result = mockSignup({
+    setIsLoading(true);
+    const result = await signup({
       firstName: formData.firstName,
       lastName: formData.lastName,
       email: formData.email,
       password: formData.password,
+      agreeTerms: formData.agreeTerms,
     });
+    setIsLoading(false);
+
 
     if (result.success) {
       if (typeof window !== 'undefined') {
@@ -94,10 +101,11 @@ export default function SignupPage() {
     } else {
       setErrors((prev) => ({
         ...prev,
-        email: result.message || 'An account with this email address already exists.',
+        email: result.error || 'An account with this email address already exists.',
       }));
     }
   };
+
 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
@@ -235,10 +243,12 @@ export default function SignupPage() {
 
             <button
               type="submit"
-              className="w-full bg-blue-600 text-white font-medium py-2 rounded-lg hover:bg-blue-700 transition-colors mt-6 cursor-pointer"
+              disabled={isLoading}
+              className="w-full bg-blue-600 text-white font-medium py-2 rounded-lg hover:bg-blue-700 transition-colors mt-6 cursor-pointer disabled:opacity-70"
             >
-              Create Account
+              {isLoading ? 'Creating Account...' : 'Create Account'}
             </button>
+
           </form>
 
           <div className="mt-6 pt-6 border-t border-slate-200">

@@ -1,37 +1,80 @@
 'use client';
 
-import { useSyncExternalStore } from 'react';
+import { useEffect, useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import StatusBadge from '@/components/StatusBadge';
-import { getCurrentMockUser } from '@/lib/mock/auth';
-import { getUserTransactions } from '@/lib/mock/transactions';
+import { useAuth } from '@/lib/auth-context';
+import { getTransactions } from '@/lib/api/transactions';
 import { formatCurrency, formatDate } from '@/lib/formatting';
-import { useState } from 'react';
-
-const subscribe = () => () => {};
+import { Transaction, TransactionStatus } from '@/types';
 
 export default function TransactionsPage() {
-  const isMounted = useSyncExternalStore(
-    subscribe,
-    () => true,
-    () => false
-  );
-
-  const user = getCurrentMockUser();
-  const userTransactions = isMounted ? getUserTransactions(user?.id) : [];
+  const { user } = useAuth();
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
 
   const [statusFilter, setStatusFilter] = useState<'all' | 'completed' | 'pending' | 'failed'>(
     'all'
   );
   const [searchReference, setSearchReference] = useState('');
 
-  const filteredTransactions = userTransactions.filter((tx) => {
-    const matchesStatus =
-      statusFilter === 'all' || tx.status.toLowerCase() === statusFilter.toLowerCase();
-    const matchesSearch =
-      searchReference === '' || tx.reference.toLowerCase().includes(searchReference.toLowerCase());
-    return matchesStatus && matchesSearch;
-  });
+  const fetchTransactions = (status: typeof statusFilter, ref: string) => {
+    setIsLoading(true);
+    setError(null);
+
+    const statusParam =
+      status === 'all' ? undefined : (status.toUpperCase() as TransactionStatus);
+    const refParam = ref.trim() || undefined;
+
+    getTransactions({
+      status: statusParam,
+      reference: refParam,
+    })
+      .then((data) => {
+        setTransactions(data.items);
+        setIsLoading(false);
+      })
+      .catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : 'Failed to load transactions';
+        setError(message);
+        setIsLoading(false);
+      });
+  };
+
+  useEffect(() => {
+    if (!user) return;
+    let isCancelled = false;
+
+    const timer = setTimeout(() => {
+      const statusParam =
+        statusFilter === 'all' ? undefined : (statusFilter.toUpperCase() as TransactionStatus);
+      const refParam = searchReference.trim() || undefined;
+
+      getTransactions({
+        status: statusParam,
+        reference: refParam,
+      })
+        .then((data) => {
+          if (!isCancelled) {
+            setTransactions(data.items);
+            setIsLoading(false);
+          }
+        })
+        .catch((err: unknown) => {
+          if (!isCancelled) {
+            const message = err instanceof Error ? err.message : 'Failed to load transactions';
+            setError(message);
+            setIsLoading(false);
+          }
+        });
+    }, 250);
+
+    return () => {
+      isCancelled = true;
+      clearTimeout(timer);
+    };
+  }, [user, statusFilter, searchReference]);
 
   return (
     <DashboardLayout user={user}>
@@ -40,6 +83,25 @@ export default function TransactionsPage() {
           <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Transactions</h1>
           <p className="text-slate-600 dark:text-slate-400 mt-2">View and manage all your transactions</p>
         </div>
+
+        {/* Error Alert */}
+        {error && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <svg className="w-5 h-5 text-red-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span>{error}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => fetchTransactions(statusFilter, searchReference)}
+              className="text-xs font-semibold px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-800 rounded transition-colors cursor-pointer"
+            >
+              Retry
+            </button>
+          </div>
+        )}
 
         {/* Filters */}
         <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm p-6 mb-6 border border-slate-200 dark:border-slate-800 transition-colors">
@@ -110,8 +172,8 @@ export default function TransactionsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                {isMounted && filteredTransactions.length > 0 ? (
-                  filteredTransactions.map((tx) => (
+                {!isLoading && transactions.length > 0 ? (
+                  transactions.map((tx) => (
                     <tr key={tx.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
                       <td className="px-6 py-4 text-sm text-slate-900 dark:text-slate-200">
                         {formatDate(tx.date)}
@@ -124,7 +186,7 @@ export default function TransactionsPage() {
                         {formatCurrency(tx.fee, tx.currency)}
                       </td>
                       <td className="px-6 py-4 text-sm text-slate-900 dark:text-slate-200 font-mono">
-                        {tx.exchangeRate.toFixed(4)}
+                        {tx.exchangeRate ? tx.exchangeRate.toFixed(4) : '1.0000'}
                       </td>
                       <td className="px-6 py-4 text-sm">
                         <StatusBadge status={tx.status} />
@@ -134,7 +196,7 @@ export default function TransactionsPage() {
                       </td>
                     </tr>
                   ))
-                ) : isMounted ? (
+                ) : !isLoading ? (
                   <tr>
                     <td colSpan={7} className="px-6 py-12 text-center text-slate-600 dark:text-slate-400">
                       No transactions found
@@ -157,3 +219,4 @@ export default function TransactionsPage() {
     </DashboardLayout>
   );
 }
+
