@@ -1,9 +1,8 @@
 'use client';
 
 import { useSyncExternalStore } from 'react';
-import { useRouter } from 'next/navigation';
 import { User } from '@/types';
-import { mockLogout } from '@/lib/mock/auth';
+import { useAuth } from '@/lib/auth-context';
 
 const subscribe = () => () => {};
 
@@ -17,12 +16,12 @@ export default function Header({ user }: HeaderProps) {
     () => true,
     () => false
   );
-  const router = useRouter();
+  const { logout } = useAuth();
 
-  const handleLogout = () => {
-    mockLogout();
-    router.push('/login');
+  const handleLogout = async () => {
+    await logout();
   };
+
 
   return (
     <header className="border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-8 py-4 flex items-center justify-between transition-colors duration-150">

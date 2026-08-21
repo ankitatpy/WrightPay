@@ -3,10 +3,11 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { verifyMockCode } from '@/lib/mock/auth';
+import { useAuth } from '@/lib/auth-context';
 
 export default function VerifyEmailPage() {
   const router = useRouter();
+  const { verifyEmail } = useAuth();
   const [code, setCode] = useState('');
   const [email] = useState<string>(() => {
     if (typeof window !== 'undefined') {
@@ -20,8 +21,9 @@ export default function VerifyEmailPage() {
   });
   const [error, setError] = useState<string>('');
   const [resendSuccess, setResendSuccess] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError('');
 
@@ -36,13 +38,22 @@ export default function VerifyEmailPage() {
       return;
     }
 
-    const isValid = verifyMockCode(email || '', trimmedCode);
-    if (isValid) {
+    if (!email) {
+      setError('No signup email found. Please sign up first.');
+      return;
+    }
+
+    setIsLoading(true);
+    const result = await verifyEmail(email, trimmedCode);
+    setIsLoading(false);
+
+    if (result.success) {
       router.push('/onboarding');
     } else {
-      setError('Invalid verification code. Please enter 123456 for testing.');
+      setError(result.error || 'Invalid verification code. Please check and try again.');
     }
   };
+
 
   const handleResend = () => {
     setResendSuccess(true);
@@ -121,10 +132,12 @@ export default function VerifyEmailPage() {
 
             <button
               type="submit"
-              className="w-full bg-blue-600 text-white font-medium py-2 rounded-lg hover:bg-blue-700 transition-colors mt-6 cursor-pointer"
+              disabled={isLoading}
+              className="w-full bg-blue-600 text-white font-medium py-2 rounded-lg hover:bg-blue-700 transition-colors mt-6 cursor-pointer disabled:opacity-70"
             >
-              Verify email
+              {isLoading ? 'Verifying...' : 'Verify email'}
             </button>
+
           </form>
 
           <div className="mt-6 pt-6 border-t border-slate-200 text-center">
