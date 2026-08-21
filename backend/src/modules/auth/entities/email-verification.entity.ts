@@ -13,7 +13,7 @@ export class EmailVerification {
   @Column({ type: 'varchar', length: 255 })
   email: string;
 
-  @Column({ type: 'varchar', length: 6 })
+  @Column({ type: 'varchar', length: 10 })
   verificationCode: string;
 
   @Column({ type: 'boolean', default: false })

@@ -1,25 +1,20 @@
-import { IsString, IsNotEmpty, IsNumber, Min, IsEnum } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { IsNotEmpty, IsNumber, IsString, IsEnum, Min } from 'class-validator';
 import { Currency } from '../../../core/enums/currency.enum';
 
 export class CreateTransferDto {
-  @ApiProperty()
-  @IsNotEmpty()
   @IsString()
+  @IsNotEmpty()
   beneficiaryId: string;
 
-  @ApiProperty()
-  @IsNotEmpty()
   @IsString()
+  @IsNotEmpty()
   sourceWalletId: string;
 
-  @ApiProperty()
-  @IsNotEmpty()
   @IsNumber()
   @Min(0.01)
   sendAmount: number;
 
-  @ApiProperty({ enum: Currency })
   @IsEnum(Currency)
-  destinationCurrency: Currency;
+  @IsNotEmpty()
+  destinationCurrency: string;
 }

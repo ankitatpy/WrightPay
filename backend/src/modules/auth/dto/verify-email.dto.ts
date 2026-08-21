@@ -7,8 +7,8 @@ export class VerifyEmailDto {
   email: string;
 
   @ApiProperty()
-  @IsNotEmpty()
   @IsString()
+  @IsNotEmpty()
   @Length(6, 6)
   code: string;
 }

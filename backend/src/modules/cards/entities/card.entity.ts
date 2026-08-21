@@ -4,6 +4,8 @@ import {
   PrimaryGeneratedColumn,
   ManyToOne,
   JoinColumn,
+  CreateDateColumn,
+  UpdateDateColumn,
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 
@@ -39,11 +41,17 @@ export class Card {
   cardholderName: string;
 
   @Column({ type: 'varchar', length: 5 })
-  expiryDate: string;
+  expiryDate: string; // MM/YY
 
   @Column({ type: 'enum', enum: CardStatus, default: CardStatus.PENDING })
   status: CardStatus;
 
   @Column({ type: 'enum', enum: CardType, default: CardType.DEBIT })
   type: CardType;
+
+  @CreateDateColumn()
+  createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
 }

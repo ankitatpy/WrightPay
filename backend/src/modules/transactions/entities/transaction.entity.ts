@@ -32,41 +32,37 @@ export class Transaction {
   @Column({ type: 'varchar', length: 100, unique: true })
   reference: string;
 
-  @Column({ type: 'timestamp' })
+  @CreateDateColumn()
   date: Date;
 
   @Column({ type: 'varchar', length: 255 })
   recipient: string;
 
-  @Column({ type: 'decimal', precision: 15, scale: 2 })
+  @Column({ type: 'decimal', precision: 12, scale: 2 })
   amount: number;
 
-  @Column({ type: 'enum', enum: Currency, default: Currency.EUR })
+  @Column({ type: 'enum', enum: Currency })
   currency: Currency;
 
-  @Column({ type: 'decimal', precision: 15, scale: 2, nullable: true })
+  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
   senderAmount: number;
 
   @Column({ type: 'enum', enum: Currency, nullable: true })
   senderCurrency: Currency;
 
-  @Column({ type: 'decimal', precision: 15, scale: 2, nullable: true })
+  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
   recipientAmount: number;
 
   @Column({ type: 'enum', enum: Currency, nullable: true })
   recipientCurrency: Currency;
 
-  @Column({ type: 'decimal', precision: 15, scale: 2 })
+  @Column({ type: 'decimal', precision: 12, scale: 2, default: 0 })
   fee: number;
 
-  @Column({ type: 'decimal', precision: 15, scale: 6 })
+  @Column({ type: 'decimal', precision: 10, scale: 4, nullable: true })
   exchangeRate: number;
 
-  @Column({
-    type: 'enum',
-    enum: TransactionStatus,
-    default: TransactionStatus.PENDING,
-  })
+  @Column({ type: 'enum', enum: TransactionStatus, default: TransactionStatus.PENDING })
   status: TransactionStatus;
 
   @Column({ type: 'varchar', length: 255, nullable: true })

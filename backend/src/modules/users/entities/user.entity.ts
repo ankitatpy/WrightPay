@@ -6,11 +6,11 @@ import {
   UpdateDateColumn,
   OneToMany,
 } from 'typeorm';
+import { Currency } from '../../../core/enums/currency.enum';
 import { Wallet } from '../../wallets/entities/wallet.entity';
 import { Beneficiary } from '../../beneficiaries/entities/beneficiary.entity';
 import { Card } from '../../cards/entities/card.entity';
 import { Transaction } from '../../transactions/entities/transaction.entity';
-import { Currency } from '../../../core/enums/currency.enum';
 
 export enum AccountType {
   INDIVIDUAL = 'individual',

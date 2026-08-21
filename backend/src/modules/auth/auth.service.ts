@@ -1,184 +1,160 @@
-import {
-  Injectable,
-  BadRequestException,
-  UnauthorizedException,
-  ForbiddenException,
-} from '@nestjs/common';
+import { Injectable, BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
-import { User, AccountStatus, KycStatus } from '../users/entities/user.entity';
-import { Currency } from '../../core/enums/currency.enum';
+import { User, AccountStatus, KycStatus, AccountType } from '../users/entities/user.entity';
 import { EmailVerification } from './entities/email-verification.entity';
 import { Wallet } from '../wallets/entities/wallet.entity';
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
-// import { InjectRedis } from '@nestjs-modules/ioredis';
-// import Redis from 'ioredis';
+import { Currency } from '../../core/enums/currency.enum';
 
 @Injectable()
 export class AuthService {
   constructor(
     @InjectRepository(User)
-    private usersRepository: Repository<User>,
+    private userRepository: Repository<User>,
     @InjectRepository(EmailVerification)
-    private emailVerificationsRepository: Repository<EmailVerification>,
+    private emailVerificationRepository: Repository<EmailVerification>,
     @InjectRepository(Wallet)
-    private walletsRepository: Repository<Wallet>,
+    private walletRepository: Repository<Wallet>,
     private jwtService: JwtService,
-    // Add redis for rate limiting OTP if needed
   ) {}
 
   async signup(signupDto: SignupDto) {
     const { firstName, lastName, email, password } = signupDto;
 
-    const cleanEmail = email.trim().toLowerCase();
-
-    const existingUser = await this.usersRepository.findOne({
-      where: { email: cleanEmail },
-    });
+    const existingUser = await this.userRepository.findOne({ where: { email: email.toLowerCase() } });
     if (existingUser) {
-      throw new BadRequestException(
-        'An account with this email address already exists.',
-      );
+      throw new BadRequestException('Email already in use');
     }
 
     const passwordHash = await argon2.hash(password);
 
-    const user = this.usersRepository.create({
-      name: `${firstName.trim()} ${lastName.trim()}`,
-      email: cleanEmail,
+    const user = this.userRepository.create({
+      name: `${firstName} ${lastName}`.trim(),
+      email: email.toLowerCase().trim(),
       passwordHash,
       accountStatus: AccountStatus.PENDING,
       kycStatus: KycStatus.NOT_STARTED,
       defaultCurrency: Currency.EUR,
+      accountType: AccountType.INDIVIDUAL,
     });
 
-    await this.usersRepository.save(user);
+    await this.userRepository.save(user);
 
-    const wallet = this.walletsRepository.create({
+    const wallet = this.walletRepository.create({
       user,
-      userId: user.id,
       currency: Currency.EUR,
       balance: 0,
       isDefault: true,
     });
-    await this.walletsRepository.save(wallet);
 
-    // generate OTP
-    const otp = this.generateOtp();
+    await this.walletRepository.save(wallet);
+
+    // Generate OTP for email verification
+    const otp = Math.floor(100000 + Math.random() * 900000).toString(); // 6 digits
+
+    // In dev, use a fixed one if needed or just output it. Let's create it.
     const expiresAt = new Date();
     expiresAt.setMinutes(expiresAt.getMinutes() + 15);
 
-    const verification = this.emailVerificationsRepository.create({
-      email: cleanEmail,
-      verificationCode: otp,
+    const verification = this.emailVerificationRepository.create({
+      email: user.email,
+      verificationCode: process.env.NODE_ENV === 'development' ? '123456' : otp,
+      isVerified: false,
       expiresAt,
     });
-    await this.emailVerificationsRepository.save(verification);
 
-    // Normally send email here. Since it's a mock, we just return success.
+    await this.emailVerificationRepository.save(verification);
+
     return {
-      message: 'Account created successfully. Please verify your email.',
+      message: 'Signup successful. Please verify your email.',
+      userId: user.id,
+      // Ideally we don't return the OTP, but for dev purposes or the assignment we can log it
     };
-  }
-
-  async verifyEmail(verifyEmailDto: VerifyEmailDto) {
-    const { email, code } = verifyEmailDto;
-    const cleanEmail = email.trim().toLowerCase();
-
-    // Check rate limit conceptually. Here we just query the DB.
-    // For fallback in test environment
-    if (code === '123456') {
-      const user = await this.usersRepository.findOne({
-        where: { email: cleanEmail },
-      });
-      if (user && user.accountStatus === AccountStatus.PENDING) {
-        user.accountStatus = AccountStatus.ACTIVE;
-        await this.usersRepository.save(user);
-        return { success: true, message: 'Email verified successfully.' };
-      }
-    }
-
-    const verification = await this.emailVerificationsRepository.findOne({
-      where: { email: cleanEmail },
-      order: { createdAt: 'DESC' },
-    });
-
-    if (!verification || verification.verificationCode !== code) {
-      throw new BadRequestException('Invalid verification code.');
-    }
-
-    if (verification.expiresAt < new Date()) {
-      throw new BadRequestException('Verification code has expired.');
-    }
-
-    verification.isVerified = true;
-    await this.emailVerificationsRepository.save(verification);
-
-    const user = await this.usersRepository.findOne({
-      where: { email: cleanEmail },
-    });
-    if (user && user.accountStatus === AccountStatus.PENDING) {
-      user.accountStatus = AccountStatus.ACTIVE;
-      await this.usersRepository.save(user);
-    }
-
-    return { success: true, message: 'Email verified successfully.' };
   }
 
   async login(loginDto: LoginDto) {
     const { email, password } = loginDto;
-    const cleanEmail = email.trim().toLowerCase();
 
-    const user = await this.usersRepository.findOne({
-      where: { email: cleanEmail },
+    const user = await this.userRepository.findOne({
+      where: { email: email.toLowerCase().trim() },
       select: {
         id: true,
         email: true,
         passwordHash: true,
         accountStatus: true,
-        name: true,
-      },
+        name: true
+      }
     });
 
     if (!user) {
-      throw new UnauthorizedException('Invalid credentials.');
+      throw new UnauthorizedException('INVALID_CREDENTIALS');
     }
 
     const isPasswordValid = await argon2.verify(user.passwordHash, password);
     if (!isPasswordValid) {
-      throw new UnauthorizedException('Invalid credentials.');
+      throw new UnauthorizedException('INVALID_CREDENTIALS');
     }
 
     if (user.accountStatus === AccountStatus.SUSPENDED) {
-      throw new ForbiddenException(
-        'Your account has been suspended. Please contact support.',
-      );
+      throw new UnauthorizedException('ACCOUNT_SUSPENDED');
     }
 
     if (user.accountStatus === AccountStatus.CLOSED) {
-      throw new ForbiddenException(
-        'This account has been closed. Please contact support.',
-      );
+      throw new UnauthorizedException('ACCOUNT_CLOSED');
     }
 
     const payload = { sub: user.id, email: user.email };
-    const accessToken = this.jwtService.sign(payload);
-
-    // Remove password hash from response
-    const { passwordHash: _, ...userWithoutPassword } = user;
-
     return {
-      accessToken,
-      user: userWithoutPassword,
-      message: 'Login successful.',
+      access_token: await this.jwtService.signAsync(payload),
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+      }
     };
   }
 
-  private generateOtp(): string {
-    return Math.floor(100000 + Math.random() * 900000).toString();
+  async verifyEmail(verifyEmailDto: VerifyEmailDto) {
+    const { email, code } = verifyEmailDto;
+
+    const verification = await this.emailVerificationRepository.findOne({
+      where: { email: email.toLowerCase().trim(), verificationCode: code },
+      order: { createdAt: 'DESC' }
+    });
+
+    if (!verification) {
+      throw new BadRequestException('INVALID_INPUT');
+    }
+
+    if (verification.isVerified) {
+      throw new BadRequestException('Email is already verified');
+    }
+
+    if (new Date() > verification.expiresAt) {
+      throw new BadRequestException('Verification code expired');
+    }
+
+    verification.isVerified = true;
+    await this.emailVerificationRepository.save(verification);
+
+    // Update user status
+    const user = await this.userRepository.findOne({ where: { email: email.toLowerCase().trim() } });
+    if (user && user.accountStatus === AccountStatus.PENDING) {
+      user.accountStatus = AccountStatus.ACTIVE;
+      await this.userRepository.save(user);
+    }
+
+    return { message: 'Email successfully verified' };
+  }
+
+  async logout() {
+    // Basic JWT doesn't support server-side logout without a token blacklist (Redis).
+    // The client just deletes the token.
+    return { message: 'Logged out successfully' };
   }
 }

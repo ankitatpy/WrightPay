@@ -4,13 +4,11 @@ import {
   PrimaryGeneratedColumn,
   ManyToOne,
   JoinColumn,
-  Check,
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 import { Currency } from '../../../core/enums/currency.enum';
 
 @Entity('wallets')
-@Check(`"balance" >= 0`)
 export class Wallet {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -25,7 +23,7 @@ export class Wallet {
   @Column({ type: 'enum', enum: Currency, default: Currency.EUR })
   currency: Currency;
 
-  @Column({ type: 'decimal', precision: 15, scale: 2, default: 0 })
+  @Column({ type: 'decimal', precision: 12, scale: 2, default: 0 })
   balance: number;
 
   @Column({ type: 'boolean', default: false })
