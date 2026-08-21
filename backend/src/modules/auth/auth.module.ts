@@ -12,6 +12,7 @@ import { Wallet } from '../wallets/entities/wallet.entity';
   imports: [
     TypeOrmModule.forFeature([User, EmailVerification, Wallet]),
     JwtModule.registerAsync({
+      global: true,
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({
         secret: configService.get<string>('JWT_SECRET'),
@@ -25,3 +26,4 @@ import { Wallet } from '../wallets/entities/wallet.entity';
   exports: [AuthService],
 })
 export class AuthModule {}
+

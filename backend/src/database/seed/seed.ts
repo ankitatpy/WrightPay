@@ -22,6 +22,7 @@ import {
   Transaction,
   TransactionStatus,
 } from '../../modules/transactions/entities/transaction.entity';
+import { EmailVerification } from '../../modules/auth/entities/email-verification.entity';
 
 // Config
 const AppDataSource = new DataSource({
@@ -36,10 +37,11 @@ const AppDataSource = new DataSource({
     Beneficiary,
     Card,
     Transaction,
-    __dirname + '/../../modules/auth/entities/email-verification.entity.ts',
+    EmailVerification,
   ],
   synchronize: true, // using synchronize for seed script
 });
+
 
 async function seed() {
   await AppDataSource.initialize();
@@ -68,7 +70,7 @@ async function seed() {
   const tariq = AppDataSource.manager.create(User, {
     id: '22222222-2222-2222-2222-222222222222',
     name: 'Tariq Al-Fayed',
-    email: 'tariq.alfayed@example.com',
+    email: 'tariq.al-fayed@example.com',
     passwordHash,
     accountType: AccountType.INDIVIDUAL,
     countryOfResidence: 'UAE',
@@ -76,6 +78,7 @@ async function seed() {
     accountStatus: AccountStatus.ACTIVE,
     defaultCurrency: Currency.AED,
   });
+
 
   const acme = AppDataSource.manager.create(User, {
     id: '33333333-3333-3333-3333-333333333333',

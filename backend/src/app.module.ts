@@ -30,13 +30,21 @@ import { TransfersModule } from './modules/transfers/transfers.module';
     }),
     BullModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => ({
-        connection: {
-          url: configService.get<string>('REDIS_URL'),
-        },
-      }),
+      useFactory: (configService: ConfigService) => {
+        const redisUrl = configService.get<string>('REDIS_URL');
+        if (redisUrl) {
+          return { connection: { url: redisUrl } };
+        }
+        return {
+          connection: {
+            host: configService.get<string>('REDIS_HOST', 'localhost'),
+            port: Number(configService.get<number>('REDIS_PORT', 6379)),
+          },
+        };
+      },
       inject: [ConfigService],
     }),
+
     AuthModule,
     UsersModule,
     WalletsModule,
