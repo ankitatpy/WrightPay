@@ -6,8 +6,29 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  app.enableCors();
+  const frontendUrl = process.env.FRONTEND_URL;
+
+  const allowedOrigins: (string | RegExp)[] = [
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+  ];
+
+  if (frontendUrl) {
+    allowedOrigins.push(frontendUrl.replace(/\/$/, ''));
+  }
+
+  // Allow all Vercel production and preview subdomains
+  allowedOrigins.push(/^https:\/\/.*\.vercel\.app$/);
+
+  app.enableCors({
+    origin: allowedOrigins,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key'],
+  });
+
   app.setGlobalPrefix('api/v1');
+
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 
   const config = new DocumentBuilder()

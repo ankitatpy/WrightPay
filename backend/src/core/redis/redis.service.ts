@@ -10,12 +10,16 @@ export class RedisService implements OnModuleDestroy {
   constructor(private readonly configService: ConfigService) {
     const redisUrl = this.configService.get<string>('REDIS_URL');
     if (redisUrl) {
-      this.client = new Redis(redisUrl);
+      const isTls = redisUrl.startsWith('rediss://');
+      this.client = new Redis(redisUrl, {
+        tls: isTls ? { rejectUnauthorized: false } : undefined,
+      });
     } else {
       const host = this.configService.get<string>('REDIS_HOST', 'localhost');
       const port = Number(this.configService.get<number>('REDIS_PORT', 6379));
       this.client = new Redis({ host, port });
     }
+
 
     this.client.on('connect', () => {
       this.logger.log('Connected to Redis');

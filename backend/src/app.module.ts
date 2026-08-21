@@ -23,12 +23,21 @@ import { TransfersModule } from './modules/transfers/transfers.module';
 
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => ({
-        type: 'postgres',
-        url: configService.get<string>('DATABASE_URL'),
-        autoLoadEntities: true,
-        synchronize: true, // For development only. In production, use migrations.
-      }),
+      useFactory: (configService: ConfigService) => {
+        const dbUrl = configService.get<string>('DATABASE_URL');
+        const dbSsl = configService.get<string>('DATABASE_SSL');
+        const isSsl =
+          dbSsl === 'true' ||
+          (dbUrl && (dbUrl.includes('sslmode=require') || dbUrl.includes('ssl=true')));
+
+        return {
+          type: 'postgres',
+          url: dbUrl,
+          autoLoadEntities: true,
+          synchronize: true, // For development & initial provisioning. In strict production, use migrations.
+          ssl: isSsl ? { rejectUnauthorized: false } : false,
+        };
+      },
       inject: [ConfigService],
     }),
     BullModule.forRootAsync({
@@ -36,7 +45,13 @@ import { TransfersModule } from './modules/transfers/transfers.module';
       useFactory: (configService: ConfigService) => {
         const redisUrl = configService.get<string>('REDIS_URL');
         if (redisUrl) {
-          return { connection: { url: redisUrl } };
+          const isTls = redisUrl.startsWith('rediss://');
+          return {
+            connection: {
+              url: redisUrl,
+              tls: isTls ? { rejectUnauthorized: false } : undefined,
+            },
+          };
         }
         return {
           connection: {
@@ -47,6 +62,7 @@ import { TransfersModule } from './modules/transfers/transfers.module';
       },
       inject: [ConfigService],
     }),
+
 
     AuthModule,
     UsersModule,
