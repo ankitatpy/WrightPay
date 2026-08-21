@@ -152,6 +152,91 @@ async function seed() {
   });
   await AppDataSource.manager.save(annaCard);
 
+  // Seed Transactions
+  const annaTxs = [
+    {
+      userId: anna.id,
+      reference: 'WP-20260816-001',
+      recipient: 'Rajesh Sharma',
+      amount: 500.0,
+      currency: Currency.EUR,
+      senderAmount: 500.0,
+      senderCurrency: Currency.EUR,
+      recipientAmount: 45250.0,
+      recipientCurrency: Currency.INR,
+      fee: 25.0,
+      exchangeRate: 90.5,
+      status: TransactionStatus.COMPLETED,
+      date: new Date('2026-08-16T10:00:00Z'),
+    },
+    {
+      userId: anna.id,
+      reference: 'WP-20260815-002',
+      recipient: 'Priya Patel',
+      amount: 250.0,
+      currency: Currency.EUR,
+      senderAmount: 250.0,
+      senderCurrency: Currency.EUR,
+      recipientAmount: 22625.0,
+      recipientCurrency: Currency.INR,
+      fee: 25.0,
+      exchangeRate: 90.5,
+      status: TransactionStatus.PROCESSING,
+      date: new Date('2026-08-15T10:00:00Z'),
+    },
+    {
+      userId: anna.id,
+      reference: 'WP-20260814-003',
+      recipient: 'Marie Dubois',
+      amount: 1000.0,
+      currency: Currency.EUR,
+      senderAmount: 1000.0,
+      senderCurrency: Currency.EUR,
+      recipientAmount: 1000.0,
+      recipientCurrency: Currency.EUR,
+      fee: 25.0,
+      exchangeRate: 1.0,
+      status: TransactionStatus.PENDING,
+      date: new Date('2026-08-14T10:00:00Z'),
+    },
+    {
+      userId: anna.id,
+      reference: 'WP-20260813-004',
+      recipient: 'Rajesh Sharma',
+      amount: 1500.0,
+      currency: Currency.EUR,
+      senderAmount: 1500.0,
+      senderCurrency: Currency.EUR,
+      recipientAmount: 135750.0,
+      recipientCurrency: Currency.INR,
+      fee: 25.0,
+      exchangeRate: 90.5,
+      status: TransactionStatus.FAILED,
+      failureReason: 'Beneficiary bank account verification failed',
+      date: new Date('2026-08-13T10:00:00Z'),
+    },
+  ].map((tx) => AppDataSource.manager.create(Transaction, tx));
+
+  const tariqTxs = [
+    {
+      userId: tariq.id,
+      reference: 'WP-20260816-101',
+      recipient: 'John Smith',
+      amount: 5000.0,
+      currency: Currency.AED,
+      senderAmount: 5000.0,
+      senderCurrency: Currency.AED,
+      recipientAmount: 1360.54,
+      recipientCurrency: Currency.USD,
+      fee: 50.0,
+      exchangeRate: 0.2721,
+      status: TransactionStatus.COMPLETED,
+      date: new Date('2026-08-16T14:30:00Z'),
+    },
+  ].map((tx) => AppDataSource.manager.create(Transaction, tx));
+
+  await AppDataSource.manager.save([...annaTxs, ...tariqTxs]);
+
   console.log('Seed complete.');
   await AppDataSource.destroy();
 }
@@ -160,3 +245,4 @@ seed().catch((err) => {
   console.error(err);
   process.exit(1);
 });
+
