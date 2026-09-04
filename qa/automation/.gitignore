@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+
+# Test output and reports (preserve directory structure with .gitkeep)
+reports/*
+!reports/.gitkeep
+!reports/README.md
+
+# Environment variables
+.env
+.env.local
+
+# Playwright cache & artifacts
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
