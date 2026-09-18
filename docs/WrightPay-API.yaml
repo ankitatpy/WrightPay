@@ -1,0 +1,1918 @@
+openapi: '3.0.3'
+info:
+  title: WrightPay API
+  version: 1.0.0
+  description: |
+    # WrightPay V1 REST API Specification
+
+    This OpenAPI 3.0 specification documents the **CURRENT** backend implementation of the WrightPay cross-border digital payment platform.
+    
+    ### Architecture Summary
+    - **Framework:** NestJS (Node.js/TypeScript)
+    - **Primary Datastore:** PostgreSQL 15 (managed via TypeORM)
+    - **Caching & Broker:** Redis 7 (used for transfer idempotency locks, replay cache, and BullMQ broker)
+    - **Asynchronous Processing:** BullMQ worker queues (`transfers` queue, `process-transfer` job)
+    - **Global API Base Prefix:** `/api/v1`
+    - **Default Port:** `3001`
+    - **Interactive Documentation:** Available locally at `http://localhost:3001/api/docs`
+
+    ### Authentication
+    Protected endpoints require HTTP Bearer authentication using JSON Web Tokens (JWT).
+    Include the token in the request header:
+    ```http
+    Authorization: Bearer <access_token>
+    ```
+
+    ### Idempotency & Financial Safety
+    Money transfer operations (`POST /transfers`) require an `Idempotency-Key` HTTP header. 
+    Duplicate requests with the same key and payload replay the cached response. Conflicting payloads return HTTP 409 Conflict.
+servers:
+  - url: http://localhost:3001/api/v1
+    description: Local development environment
+  - url: https://api.wrightpay.example.com/api/v1
+    description: Production environment reference
+tags:
+  - name: Auth
+    description: Registration, authentication, email verification, and session termination
+  - name: Users
+    description: Authenticated user profile retrieval and management
+  - name: Wallets
+    description: Primary funding wallet balance and cross-currency equivalent balances
+  - name: Cards
+    description: Payment card tokenization, lifecycle status management, and deletion
+  - name: Beneficiaries
+    description: Transfer recipient management, banking details, and UPI routing
+  - name: Transfers
+    description: Atomic wallet-to-beneficiary money transfers with Redis idempotency and BullMQ queueing
+  - name: Transactions
+    description: Read-only historical transaction ledger, pagination, and status filtering
+  - name: Exchange Rates
+    description: Public exchange rates and server-side triangulated conversion quote engine
+
+paths:
+  # ============================================================================
+  # AUTH DOMAIN (4 Endpoints)
+  # ============================================================================
+  /auth/signup:
+    post:
+      tags:
+        - Auth
+      summary: Register a new user
+      description: |
+        Registers a new user account, creates an initial zero-balance default wallet in EUR, and generates a 6-digit email verification OTP.
+        - **Business Rules:**
+          - Lowercases email address.
+          - Rejects duplicate email addresses with `400 Bad Request`.
+          - Hashes password using Argon2id.
+          - Initial user states: `accountStatus: 'pending'`, `kycStatus: 'not_started'`, `defaultCurrency: 'EUR'`.
+          - In development environment (`NODE_ENV === 'development'`), verification code is hardcoded to `'123456'` (valid for 15 minutes).
+      operationId: signup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignupDto'
+            example:
+              firstName: Anna
+              lastName: Kowalski
+              email: anna.kowalski@example.com
+              password: Password123!
+              agreeTerms: true
+      responses:
+        '201':
+          description: User registered successfully. Email verification OTP issued.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignupResponse'
+              example:
+                message: Signup successful. Please verify your email.
+                userId: 11111111-1111-1111-1111-111111111111
+        '400':
+          description: Validation error or email already in use.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                statusCode: 400
+                message: Email already in use
+                error: Bad Request
+
+  /auth/login:
+    post:
+      tags:
+        - Auth
+      summary: Log in and obtain JWT access token
+      description: |
+        Authenticates user credentials using Argon2 verification and returns a Bearer JWT access token.
+        - **Business Rules:**
+          - Rejects non-existent email or invalid password with `401 Unauthorized ('INVALID_CREDENTIALS')`.
+          - Rejects suspended accounts with `401 Unauthorized ('ACCOUNT_SUSPENDED')`.
+          - Rejects closed accounts with `401 Unauthorized ('ACCOUNT_CLOSED')`.
+          - **Current Implementation Note:** Does NOT reject `pending` (unverified) accounts at login; unverified users can log in and obtain a JWT.
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginDto'
+            example:
+              email: anna.kowalski@example.com
+              password: Password123!
+      responses:
+        '200':
+          description: Successful login.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+              example:
+                access_token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+                user:
+                  id: 11111111-1111-1111-1111-111111111111
+                  email: anna.kowalski@example.com
+                  name: Anna Kowalski
+        '400':
+          description: Validation error in request body.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Authentication failure (invalid credentials, account suspended, or account closed).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidCredentials:
+                  value:
+                    statusCode: 401
+                    message: INVALID_CREDENTIALS
+                    error: Unauthorized
+                accountSuspended:
+                  value:
+                    statusCode: 401
+                    message: ACCOUNT_SUSPENDED
+                    error: Unauthorized
+                accountClosed:
+                  value:
+                    statusCode: 401
+                    message: ACCOUNT_CLOSED
+                    error: Unauthorized
+
+  /auth/verify-email:
+    post:
+      tags:
+        - Auth
+      summary: Verify email address using OTP code
+      description: |
+        Validates the 6-digit OTP code against the `email_verifications` table.
+        - **Business Rules:**
+          - Rejects if record not found (`400 'INVALID_INPUT'`).
+          - Rejects if already verified (`400 'Email is already verified'`).
+          - Rejects if code has expired (`400 'Verification code expired'`).
+          - On success, marks verification as completed and transitions `user.accountStatus` from `pending` to `active`.
+      operationId: verifyEmail
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyEmailDto'
+            example:
+              email: anna.kowalski@example.com
+              code: '123456'
+      responses:
+        '200':
+          description: Email verified successfully. User account status updated to active.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                message: Email successfully verified
+        '400':
+          description: Invalid input, expired OTP, or already verified.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidInput:
+                  value:
+                    statusCode: 400
+                    message: INVALID_INPUT
+                    error: Bad Request
+                alreadyVerified:
+                  value:
+                    statusCode: 400
+                    message: Email is already verified
+                    error: Bad Request
+                expiredCode:
+                  value:
+                    statusCode: 400
+                    message: Verification code expired
+                    error: Bad Request
+
+  /auth/logout:
+    post:
+      tags:
+        - Auth
+      summary: Log out user session
+      description: |
+        Logs out the authenticated user.
+        - **Current Implementation Note:** JWT authentication is stateless. The backend does not implement a Redis token blacklist; token invalidation is handled client-side by deleting the stored token.
+      operationId: logout
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Successfully logged out.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                message: Logged out successfully
+        '401':
+          description: Unauthorized. Missing or invalid Bearer token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ============================================================================
+  # USERS DOMAIN (2 Endpoints)
+  # ============================================================================
+  /users/me:
+    get:
+      tags:
+        - Users
+      summary: Get current authenticated user profile
+      description: |
+        Retrieves the profile of the user identified by the Bearer JWT token.
+        Password hash is excluded from the returned payload.
+      operationId: getMe
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Authenticated user profile returned successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+              example:
+                id: 11111111-1111-1111-1111-111111111111
+                name: Anna Kowalski
+                email: anna.kowalski@example.com
+                accountType: individual
+                countryOfResidence: Germany
+                kycStatus: approved
+                accountStatus: active
+                defaultCurrency: EUR
+                createdAt: '2026-08-30T10:00:00.000Z'
+                updatedAt: '2026-08-30T10:00:00.000Z'
+        '401':
+          description: Unauthorized. Missing or invalid Bearer token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: User record not found in database.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    patch:
+      tags:
+        - Users
+      summary: Update current user profile
+      description: |
+        Updates profile attributes (name, country of residence, or default currency) for the authenticated user.
+      operationId: updateMe
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserDto'
+            example:
+              name: Anna Maria Kowalski
+              countryOfResidence: Germany
+              defaultCurrency: EUR
+      responses:
+        '200':
+          description: User profile successfully updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: Validation error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ============================================================================
+  # WALLETS DOMAIN (1 Endpoint)
+  # ============================================================================
+  /wallets/me:
+    get:
+      tags:
+        - Wallets
+      summary: Get primary wallet with cross-currency equivalents
+      description: |
+        Returns the primary funding wallet of the authenticated user along with server-calculated equivalent balances in all 6 supported currencies (`EUR`, `GBP`, `USD`, `AED`, `PLN`, `INR`).
+        - **Business Rules:**
+          - Resolves native balance from PostgreSQL.
+          - Calculates equivalents dynamically using `ExchangeRatesService.getRate()`.
+          - Balances are rounded to 2 decimal places (`Math.round((val + Number.EPSILON) * 100) / 100`).
+          - Multi-wallet creation is NOT supported; users have exactly one primary wallet.
+      operationId: getMyWallet
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Wallet returned successfully with currency equivalents.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WalletResponse'
+              example:
+                id: 82e5e33a-4ac8-4897-834f-0ae927c78ae1
+                currency: EUR
+                balance: 2500.00
+                isDefault: true
+                equivalents:
+                  EUR: 2500.00
+                  GBP: 2125.00
+                  USD: 2700.00
+                  AED: 9900.00
+                  PLN: 10750.00
+                  INR: 223750.00
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Wallet not found for user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ============================================================================
+  # CARDS DOMAIN (6 Endpoints)
+  # ============================================================================
+  /cards:
+    get:
+      tags:
+        - Cards
+      summary: Get all cards for authenticated user
+      description: |
+        Retrieves all payment cards belonging to the authenticated user, ordered by creation date descending.
+      operationId: getMyCards
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of user payment cards.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Card'
+              example:
+                - id: c1111111-1111-1111-1111-111111111111
+                  userId: 11111111-1111-1111-1111-111111111111
+                  lastFourDigits: '4242'
+                  cardholderName: ANNA KOWALSKI
+                  expiryDate: '12/26'
+                  status: active
+                  type: debit
+                  createdAt: '2026-08-30T10:00:00.000Z'
+                  updatedAt: '2026-08-30T10:00:00.000Z'
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      tags:
+        - Cards
+      summary: Create/Tokenize a payment card
+      description: |
+        Tokenizes and saves a payment card for the user.
+        - **Business Rules:**
+          - Strips whitespace from card number and extracts only the last 4 digits.
+          - Full Primary Account Number (PAN) and CVV are discarded immediately and never persisted.
+          - Cardholder name is capitalized and trimmed.
+          - Initial card status is set to `active`.
+          - Default card type is `debit`.
+      operationId: createCard
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCardDto'
+            example:
+              cardholderName: ANNA KOWALSKI
+              type: debit
+              cardNumber: '4242424242424242'
+              expiryDate: '12/28'
+              cvv: '123'
+      responses:
+        '201':
+          description: Card created and tokenized successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Card'
+        '400':
+          description: Validation error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /cards/{id}/freeze:
+    post:
+      tags:
+        - Cards
+      summary: Freeze an active card
+      description: |
+        Transitions an active card to `frozen`.
+        - **Business Rules:**
+          - Rejects if card status is `deactivated` (`400 'Deactivated card cannot be modified'`).
+          - Rejects if card status is already `frozen` (`400 'Card is already frozen'`).
+          - Enforces ownership: returns `404 Not Found` if card does not belong to user.
+      operationId: freezeCard
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CardIdParam'
+      responses:
+        '200':
+          description: Card successfully frozen.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Card'
+        '400':
+          description: Card cannot be frozen (already frozen or deactivated).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Card not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /cards/{id}/unfreeze:
+    post:
+      tags:
+        - Cards
+      summary: Unfreeze a frozen card
+      description: |
+        Restores a frozen card back to `active` status.
+        - **Business Rules:**
+          - Rejects if card status is `deactivated` (`400 'Deactivated card cannot be modified'`).
+          - Rejects if card status is already `active` (`400 'Card is already active'`).
+          - Rejects if card status is not `frozen` (`400 'Only a frozen card can be unfrozen'`).
+      operationId: unfreezeCard
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CardIdParam'
+      responses:
+        '200':
+          description: Card successfully unfrozen.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Card'
+        '400':
+          description: Card cannot be unfrozen.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Card not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /cards/{id}/deactivate:
+    post:
+      tags:
+        - Cards
+      summary: Permanently deactivate a card
+      description: |
+        Transitions a card to `deactivated` status.
+        - **Business Rules:**
+          - Rejects if card is already deactivated (`400 'Card is already deactivated'`).
+          - Once deactivated, a card cannot be unfrozen or reactivated.
+      operationId: deactivateCard
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CardIdParam'
+      responses:
+        '200':
+          description: Card successfully deactivated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Card'
+        '400':
+          description: Card is already deactivated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Card not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /cards/{id}:
+    delete:
+      tags:
+        - Cards
+      summary: Delete a payment card
+      description: |
+        Hard deletes the card record from PostgreSQL.
+      operationId: deleteCard
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CardIdParam'
+      responses:
+        '200':
+          description: Card successfully deleted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteEntityResponse'
+              example:
+                message: Card successfully deleted
+                id: c1111111-1111-1111-1111-111111111111
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Card not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ============================================================================
+  # BENEFICIARIES DOMAIN (3 Endpoints)
+  # ============================================================================
+  /beneficiaries:
+    get:
+      tags:
+        - Beneficiaries
+      summary: Get all active beneficiaries
+      description: |
+        Retrieves all active (non-deleted) beneficiaries belonging to the authenticated user, ordered by name ascending.
+      operationId: getMyBeneficiaries
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of user active beneficiaries.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Beneficiary'
+              example:
+                - id: b1111111-1111-1111-1111-111111111111
+                  userId: 11111111-1111-1111-1111-111111111111
+                  name: Maria Rossi
+                  currency: EUR
+                  payoutMethod: bank_account
+                  accountNumber: IT12A345678901234567890
+                  bankCode: UNCRITM1
+                  bankName: Bank Account
+                  deletedAt: null
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      tags:
+        - Beneficiaries
+      summary: Create a new beneficiary (max 3 active per user)
+      description: |
+        Creates a new recipient beneficiary for cross-border payouts.
+        - **Business Rules:**
+          - **Strict Limit:** Maximum of 3 active beneficiaries per user (`MAX_BENEFICIARIES = 3`). Throws `400 Bad Request ('Maximum limit of 3 active beneficiaries reached')`.
+          - **UPI Validation:** If `payoutMethod === 'upi'`, `currency` MUST be `'INR'` and `upiId` is required.
+          - **Bank Account Validation:** If `payoutMethod === 'bank_account'`, `accountNumber` is required.
+      operationId: createBeneficiary
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBeneficiaryDto'
+            examples:
+              bankAccount:
+                summary: European SEPA Bank Account Beneficiary
+                value:
+                  name: Maria Rossi
+                  currency: EUR
+                  payoutMethod: bank_account
+                  accountNumber: IT12A345678901234567890
+                  bankCode: UNCRITM1
+                  bankName: UniCredit
+              upiIndia:
+                summary: Indian UPI Beneficiary (INR Only)
+                value:
+                  name: Rajesh Sharma
+                  currency: INR
+                  payoutMethod: upi
+                  upiId: rajesh@okhdfcbank
+                  bankName: UPI
+      responses:
+        '201':
+          description: Beneficiary successfully created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Beneficiary'
+        '400':
+          description: Validation error, active limit reached, or UPI currency mismatch.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                limitReached:
+                  value:
+                    statusCode: 400
+                    message: Maximum limit of 3 active beneficiaries reached
+                    error: Bad Request
+                upiCurrencyMismatch:
+                  value:
+                    statusCode: 400
+                    message: UPI payout method is only supported for INR currency
+                    error: Bad Request
+                missingUpiId:
+                  value:
+                    statusCode: 400
+                    message: UPI ID is required for UPI payout method
+                    error: Bad Request
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /beneficiaries/{id}:
+    delete:
+      tags:
+        - Beneficiaries
+      summary: Soft delete a beneficiary
+      description: |
+        Soft deletes a beneficiary by populating the `deletedAt` timestamp.
+        Soft-deleted beneficiaries are excluded from future queries and transfer validations.
+      operationId: deleteBeneficiary
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/BeneficiaryIdParam'
+      responses:
+        '200':
+          description: Beneficiary successfully soft-deleted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteEntityResponse'
+              example:
+                message: Beneficiary successfully deleted
+                id: b1111111-1111-1111-1111-111111111111
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Beneficiary not found or belongs to another user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ============================================================================
+  # TRANSFERS DOMAIN (1 Endpoint)
+  # ============================================================================
+  /transfers:
+    post:
+      tags:
+        - Transfers
+      summary: Initiate an atomic money transfer with Redis idempotency
+      description: |
+        Executes an atomic money transfer from a source wallet to a beneficiary.
+        - **Critical Requirements:**
+          - **Idempotency-Key Header:** Required string (UUID or unique client identifier). Missing header throws `400 Bad Request`.
+          - **Redis Two-Phase Lock:** Acquires key `wrightpay:idempotency:transfer:${userId}:${idempotencyKey}` with `SET NX EX 60`.
+          - **Replay Protection:** Re-sending the identical request with the same idempotency key replays the original cached response. Re-sending with a different payload returns `409 Conflict`.
+          - **User Account Check:** Suspended or closed accounts throw `403 Forbidden`.
+          - **Pessimistic Locking:** Locks the source wallet row in PostgreSQL using `SELECT ... FOR UPDATE` to prevent concurrent race conditions.
+          - **Fee & Balance Rule:** Deducts a fixed transfer fee of `25.00` units (`TRANSFER_FEE = 25.0`). Required balance = `sendAmount + 25.00`. Rejects insufficient balance with `400 Bad Request`.
+          - **UPI Validation:** If beneficiary payout method is `upi`, `destinationCurrency` must be `INR`.
+          - **Transaction Record:** Inserts `Transaction` with `status: 'PENDING'`. Reference format: `WP-YYYYMMDD-HEX`.
+          - **Asynchronous Queue:** After DB commit, enqueues job on BullMQ `transfers` queue (`jobId: transfer-${transactionId}`, 3 attempts, exponential backoff) for async settlement simulation.
+      operationId: createTransfer
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: Unique client-generated idempotency token preventing duplicate financial execution
+          schema:
+            type: string
+          example: transfer-anna-20260917-001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTransferDto'
+            example:
+              beneficiaryId: b1111111-1111-1111-1111-111111111111
+              sourceWalletId: 82e5e33a-4ac8-4897-834f-0ae927c78ae1
+              sendAmount: 100.00
+              destinationCurrency: INR
+      responses:
+        '201':
+          description: Transfer successfully initiated and debited from wallet. Transaction enqueued for processing.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferResult'
+              example:
+                id: t1111111-1111-1111-1111-111111111111
+                reference: WP-20260917-ABCD1234
+                status: PENDING
+                recipient: Maria Rossi
+                sendAmount: 100.00
+                sourceCurrency: EUR
+                recipientAmount: 8950.00
+                destinationCurrency: INR
+                fee: 25.00
+                exchangeRate: 89.5000
+                date: '2026-09-17T11:42:00.000Z'
+                createdAt: '2026-09-17T11:42:00.000Z'
+        '400':
+          description: Bad Request. Missing Idempotency-Key header, non-positive sendAmount, or insufficient balance.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                missingIdempotency:
+                  value:
+                    statusCode: 400
+                    message: Idempotency-Key header is required
+                    error: Bad Request
+                insufficientBalance:
+                  value:
+                    statusCode: 400
+                    message: 'Insufficient wallet balance. Required: 125 EUR (Amount: 100 + Fee: 25), Available: 50 EUR'
+                    error: Bad Request
+                invalidAmount:
+                  value:
+                    statusCode: 400
+                    message: Send amount must be greater than zero
+                    error: Bad Request
+                upiCurrencyMismatch:
+                  value:
+                    statusCode: 400
+                    message: UPI transfers must be in INR
+                    error: Bad Request
+        '401':
+          description: Unauthorized. Missing or invalid Bearer token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden. Account is suspended or closed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                statusCode: 403
+                message: Account is suspended or closed
+                error: Forbidden
+        '404':
+          description: Source wallet or beneficiary not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Conflict. Idempotency key reused with conflicting payload, or concurrent processing timeout.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                payloadConflict:
+                  value:
+                    statusCode: 409
+                    message: Idempotency key was already used with a different request payload
+                    error: Conflict
+                processingConflict:
+                  value:
+                    statusCode: 409
+                    message: A transfer with this idempotency key is currently processing. Please retry shortly.
+                    error: Conflict
+
+  # ============================================================================
+  # TRANSACTIONS DOMAIN (2 Endpoints)
+  # ============================================================================
+  /transactions:
+    get:
+      tags:
+        - Transactions
+      summary: Get paginated and filtered transactions
+      description: |
+        Queries the historical transaction ledger for the authenticated user.
+        - **Supported Filters:**
+          - `status`: Filter by transaction status (`PENDING`, `PROCESSING`, `COMPLETED`, `FAILED`, `SUSPICIOUS`).
+          - `reference`: Case-insensitive substring match against `reference` code or `recipient` name.
+          - `limit`: Page size (range 1–100, default: 20).
+          - `offset`: Pagination offset (minimum: 0, default: 0).
+      operationId: getMyTransactions
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: Filter transactions by lifecycle status
+          schema:
+            $ref: '#/components/schemas/TransactionStatus'
+        - name: reference
+          in: query
+          required: false
+          description: Filter or search by reference code or recipient name substring
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          description: Number of transaction records to return
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: offset
+          in: query
+          required: false
+          description: Starting offset for pagination
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Paginated transaction list returned successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedTransactionsResponse'
+              example:
+                items:
+                  - id: tx-11111111-1111-1111-1111-111111111111
+                    userId: 11111111-1111-1111-1111-111111111111
+                    reference: WP-20260816-001
+                    date: '2026-08-16T10:00:00.000Z'
+                    recipient: Rajesh Sharma
+                    amount: 500.00
+                    currency: EUR
+                    senderAmount: 500.00
+                    senderCurrency: EUR
+                    recipientAmount: 45250.00
+                    recipientCurrency: INR
+                    fee: 25.00
+                    exchangeRate: 90.5000
+                    status: COMPLETED
+                    failureReason: null
+                    createdAt: '2026-08-16T10:00:00.000Z'
+                total: 1
+                limit: 20
+                offset: 0
+        '400':
+          description: Bad Request. Invalid query parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /transactions/{id}:
+    get:
+      tags:
+        - Transactions
+      summary: Get single transaction details
+      description: |
+        Retrieves detailed record of a single transaction by UUID.
+        Enforces user ownership: throws `404 Not Found` if transaction does not belong to the authenticated user.
+      operationId: getTransactionById
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TransactionIdParam'
+      responses:
+        '200':
+          description: Transaction details returned successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FormattedTransaction'
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Transaction not found or access denied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ============================================================================
+  # EXCHANGE RATES DOMAIN (2 Endpoints)
+  # ============================================================================
+  /exchange-rates:
+    get:
+      tags:
+        - Exchange Rates
+      summary: Get all available exchange rates
+      description: |
+        Returns all stored/cached foreign exchange rates ordered by source and destination currency.
+        Public endpoint (no authentication required).
+      operationId: getAllRates
+      responses:
+        '200':
+          description: List of stored exchange rates.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ExchangeRate'
+              example:
+                - id: fx-11111111-1111-1111-1111-111111111111
+                  from: EUR
+                  to: USD
+                  rate: 1.080000
+                  timestamp: '2026-09-17T10:00:00.000Z'
+                  createdAt: '2026-09-17T10:00:00.000Z'
+                - id: fx-22222222-2222-2222-2222-222222222222
+                  from: EUR
+                  to: INR
+                  rate: 89.500000
+                  timestamp: '2026-09-17T10:00:00.000Z'
+                  createdAt: '2026-09-17T10:00:00.000Z'
+
+  /exchange-rates/quote:
+    get:
+      tags:
+        - Exchange Rates
+      summary: Calculate a currency conversion quote
+      description: |
+        Calculates cross-currency conversion quote using direct rates, inverse rates, or triangular conversion through EUR.
+        - **Calculation Logic:**
+          1. If `from === to`: returns rate `1.0`.
+          2. **Direct Rate:** Looks up `from -> to` in database.
+          3. **Inverse Rate:** Looks up `to -> from` and inverts: `1 / rate`.
+          4. **Triangular Conversion:** If neither is EUR, converts through base EUR: `(1 / (EUR -> from)) * (EUR -> to)`.
+          5. Returns `convertedAmount = Math.round((amount * rate + Number.EPSILON) * 100) / 100`.
+        Public endpoint (no authentication required).
+      operationId: getQuote
+      parameters:
+        - name: from
+          in: query
+          required: true
+          description: Source currency
+          schema:
+            $ref: '#/components/schemas/Currency'
+          example: EUR
+        - name: to
+          in: query
+          required: true
+          description: Destination currency
+          schema:
+            $ref: '#/components/schemas/Currency'
+          example: INR
+        - name: amount
+          in: query
+          required: true
+          description: Amount in source currency to convert (must be > 0)
+          schema:
+            type: number
+            minimum: 0.01
+          example: 100.00
+      responses:
+        '200':
+          description: Exchange rate quote calculated successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExchangeQuote'
+              example:
+                from: EUR
+                to: INR
+                amount: 100.00
+                rate: 89.500000
+                convertedAmount: 8950.00
+        '400':
+          description: Bad Request. Amount <= 0 or invalid currency parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                statusCode: 400
+                message: Amount must be greater than zero
+                error: Bad Request
+        '404':
+          description: Exchange rate pair not found or cannot be triangulated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                statusCode: 404
+                message: Exchange rate not found from USD to PLN
+                error: Not Found
+
+# ==============================================================================
+# COMPONENTS
+# ==============================================================================
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Standard JSON Web Token (JWT) issued on `POST /auth/login`.
+        Header format: `Authorization: Bearer <token>`
+
+  parameters:
+    CardIdParam:
+      name: id
+      in: path
+      required: true
+      description: Card UUID
+      schema:
+        type: string
+        format: uuid
+      example: c1111111-1111-1111-1111-111111111111
+
+    BeneficiaryIdParam:
+      name: id
+      in: path
+      required: true
+      description: Beneficiary UUID
+      schema:
+        type: string
+        format: uuid
+      example: b1111111-1111-1111-1111-111111111111
+
+    TransactionIdParam:
+      name: id
+      in: path
+      required: true
+      description: Transaction UUID
+      schema:
+        type: string
+        format: uuid
+      example: tx-11111111-1111-1111-1111-111111111111
+
+  schemas:
+    # --------------------------------------------------------------------------
+    # Enums
+    # --------------------------------------------------------------------------
+    Currency:
+      type: string
+      enum:
+        - EUR
+        - GBP
+        - USD
+        - AED
+        - PLN
+        - INR
+      description: Supported ISO 4217 currency codes in WrightPay
+
+    AccountType:
+      type: string
+      enum:
+        - individual
+        - business
+      description: User account classification
+
+    AccountStatus:
+      type: string
+      enum:
+        - pending
+        - active
+        - suspended
+        - closed
+      description: User account lifecycle status
+
+    KycStatus:
+      type: string
+      enum:
+        - not_started
+        - pending
+        - approved
+        - rejected
+      description: Know Your Customer (KYC) verification status
+
+    CardStatus:
+      type: string
+      enum:
+        - active
+        - frozen
+        - deactivated
+        - declined
+        - pending
+      description: Payment card lifecycle status
+
+    CardType:
+      type: string
+      enum:
+        - debit
+        - credit
+      description: Payment card type
+
+    BeneficiaryPayoutMethod:
+      type: string
+      enum:
+        - bank_account
+        - upi
+      description: Settlement payout method for transfer beneficiary
+
+    TransactionStatus:
+      type: string
+      enum:
+        - PENDING
+        - PROCESSING
+        - COMPLETED
+        - FAILED
+        - SUSPICIOUS
+      description: Transaction lifecycle status
+
+    # --------------------------------------------------------------------------
+    # DTOs (Request Bodies)
+    # --------------------------------------------------------------------------
+    SignupDto:
+      type: object
+      required:
+        - firstName
+        - lastName
+        - email
+        - password
+        - agreeTerms
+      properties:
+        firstName:
+          type: string
+          description: User first name
+          example: Anna
+        lastName:
+          type: string
+          description: User last name
+          example: Kowalski
+        email:
+          type: string
+          format: email
+          description: Unique user email address (stored in lowercase)
+          example: anna.kowalski@example.com
+        password:
+          type: string
+          minLength: 8
+          description: User password (minimum 8 characters)
+          example: Password123!
+        agreeTerms:
+          type: boolean
+          description: Acceptance of Terms of Service and Privacy Policy
+          example: true
+
+    LoginDto:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          description: Registered user email address
+          example: anna.kowalski@example.com
+        password:
+          type: string
+          description: Account password
+          example: Password123!
+
+    VerifyEmailDto:
+      type: object
+      required:
+        - email
+        - code
+      properties:
+        email:
+          type: string
+          format: email
+          description: User email address to verify
+          example: anna.kowalski@example.com
+        code:
+          type: string
+          minLength: 6
+          maxLength: 6
+          description: 6-digit OTP verification code (defaults to '123456' in dev)
+          example: '123456'
+
+    UpdateUserDto:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Full name of the user
+          example: Anna Maria Kowalski
+        countryOfResidence:
+          type: string
+          description: Country of residence
+          example: Germany
+        defaultCurrency:
+          $ref: '#/components/schemas/Currency'
+
+    CreateCardDto:
+      type: object
+      required:
+        - cardholderName
+        - cardNumber
+        - expiryDate
+      properties:
+        cardholderName:
+          type: string
+          description: Name of the cardholder
+          example: ANNA KOWALSKI
+        type:
+          $ref: '#/components/schemas/CardType'
+          default: debit
+        cardNumber:
+          type: string
+          description: 16-digit card number (full PAN is discarded, only last 4 stored)
+          example: '4242424242424242'
+        lastFourDigits:
+          type: string
+          description: Optional direct last 4 digits override
+          example: '4242'
+        expiryDate:
+          type: string
+          pattern: '^(0[1-9]|1[0-2])\/?([0-9]{2})$'
+          description: Expiry date in MM/YY format
+          example: '12/28'
+        cvv:
+          type: string
+          description: CVV security code (never stored or persisted)
+          example: '123'
+
+    CreateBeneficiaryDto:
+      type: object
+      required:
+        - name
+        - currency
+      properties:
+        name:
+          type: string
+          description: Full name of the beneficiary
+          example: Maria Rossi
+        currency:
+          $ref: '#/components/schemas/Currency'
+        payoutMethod:
+          $ref: '#/components/schemas/BeneficiaryPayoutMethod'
+          default: bank_account
+        accountNumber:
+          type: string
+          description: Bank account number / IBAN (required if payoutMethod is bank_account)
+          example: IT12A345678901234567890
+        bankCode:
+          type: string
+          description: SWIFT / BIC / Bank sorting code (required if payoutMethod is bank_account)
+          example: UNCRITM1
+        ifscCode:
+          type: string
+          description: IFSC code for Indian banking transfers
+          example: HDFC0001234
+        upiId:
+          type: string
+          description: Virtual Payment Address / UPI ID (required if payoutMethod is upi, INR only)
+          example: rajesh@okhdfcbank
+        bankName:
+          type: string
+          description: Name of the recipient bank or payout provider
+          example: UniCredit
+
+    CreateTransferDto:
+      type: object
+      required:
+        - beneficiaryId
+        - sourceWalletId
+        - sendAmount
+        - destinationCurrency
+      properties:
+        beneficiaryId:
+          type: string
+          format: uuid
+          description: UUID of the saved recipient beneficiary
+          example: b1111111-1111-1111-1111-111111111111
+        sourceWalletId:
+          type: string
+          format: uuid
+          description: UUID of the user primary funding wallet
+          example: 82e5e33a-4ac8-4897-834f-0ae927c78ae1
+        sendAmount:
+          type: number
+          minimum: 0.01
+          description: Amount to deduct from source wallet currency (must be > 0)
+          example: 100.00
+        destinationCurrency:
+          $ref: '#/components/schemas/Currency'
+          description: Currency in which the beneficiary receives funds (must be INR if beneficiary uses UPI)
+          example: INR
+
+    # --------------------------------------------------------------------------
+    # Response Models & Entities
+    # --------------------------------------------------------------------------
+    SignupResponse:
+      type: object
+      required:
+        - message
+        - userId
+      properties:
+        message:
+          type: string
+          example: Signup successful. Please verify your email.
+        userId:
+          type: string
+          format: uuid
+          example: 11111111-1111-1111-1111-111111111111
+
+    LoginResponse:
+      type: object
+      required:
+        - access_token
+        - user
+      properties:
+        access_token:
+          type: string
+          description: Signed Bearer JWT access token
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        user:
+          type: object
+          required:
+            - id
+            - email
+            - name
+          properties:
+            id:
+              type: string
+              format: uuid
+              example: 11111111-1111-1111-1111-111111111111
+            email:
+              type: string
+              format: email
+              example: anna.kowalski@example.com
+            name:
+              type: string
+              example: Anna Kowalski
+
+    MessageResponse:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          example: Operation completed successfully
+
+    DeleteEntityResponse:
+      type: object
+      required:
+        - message
+        - id
+      properties:
+        message:
+          type: string
+          example: Item successfully deleted
+        id:
+          type: string
+          format: uuid
+          example: c1111111-1111-1111-1111-111111111111
+
+    User:
+      type: object
+      required:
+        - id
+        - name
+        - email
+        - accountType
+        - kycStatus
+        - accountStatus
+        - defaultCurrency
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 11111111-1111-1111-1111-111111111111
+        name:
+          type: string
+          example: Anna Kowalski
+        email:
+          type: string
+          format: email
+          example: anna.kowalski@example.com
+        accountType:
+          $ref: '#/components/schemas/AccountType'
+        countryOfResidence:
+          type: string
+          nullable: true
+          example: Germany
+        kycStatus:
+          $ref: '#/components/schemas/KycStatus'
+        accountStatus:
+          $ref: '#/components/schemas/AccountStatus'
+        defaultCurrency:
+          $ref: '#/components/schemas/Currency'
+        createdAt:
+          type: string
+          format: date-time
+          example: '2026-08-30T10:00:00.000Z'
+        updatedAt:
+          type: string
+          format: date-time
+          example: '2026-08-30T10:00:00.000Z'
+
+    CurrencyEquivalents:
+      type: object
+      required:
+        - EUR
+        - GBP
+        - USD
+        - AED
+        - PLN
+        - INR
+      properties:
+        EUR:
+          type: number
+          example: 2500.00
+        GBP:
+          type: number
+          example: 2125.00
+        USD:
+          type: number
+          example: 2700.00
+        AED:
+          type: number
+          example: 9900.00
+        PLN:
+          type: number
+          example: 10750.00
+        INR:
+          type: number
+          example: 223750.00
+      description: Dynamic conversion equivalents of the primary wallet balance across all supported currencies
+
+    WalletResponse:
+      type: object
+      required:
+        - id
+        - currency
+        - balance
+        - isDefault
+        - equivalents
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 82e5e33a-4ac8-4897-834f-0ae927c78ae1
+        currency:
+          $ref: '#/components/schemas/Currency'
+        balance:
+          type: number
+          description: Primary wallet cash balance
+          example: 2500.00
+        isDefault:
+          type: boolean
+          example: true
+        equivalents:
+          $ref: '#/components/schemas/CurrencyEquivalents'
+
+    Card:
+      type: object
+      required:
+        - id
+        - userId
+        - lastFourDigits
+        - cardholderName
+        - expiryDate
+        - status
+        - type
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: c1111111-1111-1111-1111-111111111111
+        userId:
+          type: string
+          format: uuid
+          example: 11111111-1111-1111-1111-111111111111
+        lastFourDigits:
+          type: string
+          maxLength: 4
+          example: '4242'
+        cardholderName:
+          type: string
+          example: ANNA KOWALSKI
+        expiryDate:
+          type: string
+          example: '12/28'
+        status:
+          $ref: '#/components/schemas/CardStatus'
+        type:
+          $ref: '#/components/schemas/CardType'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    Beneficiary:
+      type: object
+      required:
+        - id
+        - userId
+        - name
+        - currency
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: b1111111-1111-1111-1111-111111111111
+        userId:
+          type: string
+          format: uuid
+          example: 11111111-1111-1111-1111-111111111111
+        name:
+          type: string
+          example: Maria Rossi
+        currency:
+          $ref: '#/components/schemas/Currency'
+        payoutMethod:
+          $ref: '#/components/schemas/BeneficiaryPayoutMethod'
+          nullable: true
+        accountNumber:
+          type: string
+          nullable: true
+          example: IT12A345678901234567890
+        bankCode:
+          type: string
+          nullable: true
+          example: UNCRITM1
+        ifscCode:
+          type: string
+          nullable: true
+          example: HDFC0001234
+        upiId:
+          type: string
+          nullable: true
+          example: rajesh@okhdfcbank
+        bankName:
+          type: string
+          nullable: true
+          example: UniCredit
+        deletedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp when soft-deleted, otherwise null
+
+    TransferResult:
+      type: object
+      required:
+        - id
+        - reference
+        - status
+        - recipient
+        - sendAmount
+        - sourceCurrency
+        - recipientAmount
+        - destinationCurrency
+        - fee
+        - exchangeRate
+        - date
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique transaction ledger record ID
+          example: t1111111-1111-1111-1111-111111111111
+        reference:
+          type: string
+          description: Public transfer reference code
+          example: WP-20260917-ABCD1234
+        status:
+          $ref: '#/components/schemas/TransactionStatus'
+          example: PENDING
+        recipient:
+          type: string
+          example: Rajesh Sharma
+        sendAmount:
+          type: number
+          description: Amount debited in source wallet currency
+          example: 100.00
+        sourceCurrency:
+          $ref: '#/components/schemas/Currency'
+          example: EUR
+        recipientAmount:
+          type: number
+          description: Amount credited in destination currency
+          example: 8950.00
+        destinationCurrency:
+          $ref: '#/components/schemas/Currency'
+          example: INR
+        fee:
+          type: number
+          description: Fixed transfer execution fee
+          example: 25.00
+        exchangeRate:
+          type: number
+          description: Exchange rate applied to conversion
+          example: 89.5000
+        date:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+
+    FormattedTransaction:
+      type: object
+      required:
+        - id
+        - userId
+        - reference
+        - date
+        - recipient
+        - amount
+        - currency
+        - fee
+        - status
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: tx-11111111-1111-1111-1111-111111111111
+        userId:
+          type: string
+          format: uuid
+          example: 11111111-1111-1111-1111-111111111111
+        reference:
+          type: string
+          example: WP-20260816-001
+        date:
+          type: string
+          format: date-time
+        recipient:
+          type: string
+          example: Rajesh Sharma
+        amount:
+          type: number
+          example: 500.00
+        currency:
+          $ref: '#/components/schemas/Currency'
+        senderAmount:
+          type: number
+          nullable: true
+          example: 500.00
+        senderCurrency:
+          $ref: '#/components/schemas/Currency'
+          nullable: true
+        recipientAmount:
+          type: number
+          nullable: true
+          example: 45250.00
+        recipientCurrency:
+          $ref: '#/components/schemas/Currency'
+          nullable: true
+        fee:
+          type: number
+          example: 25.00
+        exchangeRate:
+          type: number
+          nullable: true
+          example: 90.5000
+        status:
+          $ref: '#/components/schemas/TransactionStatus'
+        failureReason:
+          type: string
+          nullable: true
+          example: null
+        createdAt:
+          type: string
+          format: date-time
+
+    PaginatedTransactionsResponse:
+      type: object
+      required:
+        - items
+        - total
+        - limit
+        - offset
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/FormattedTransaction'
+        total:
+          type: integer
+          description: Total number of matching transaction records
+          example: 4
+        limit:
+          type: integer
+          description: Maximum items returned in this page
+          example: 20
+        offset:
+          type: integer
+          description: Starting offset
+          example: 0
+
+    ExchangeRate:
+      type: object
+      required:
+        - id
+        - from
+        - to
+        - rate
+        - timestamp
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: fx-11111111-1111-1111-1111-111111111111
+        from:
+          $ref: '#/components/schemas/Currency'
+        to:
+          $ref: '#/components/schemas/Currency'
+        rate:
+          type: number
+          example: 89.500000
+        timestamp:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+
+    ExchangeQuote:
+      type: object
+      required:
+        - from
+        - to
+        - amount
+        - rate
+        - convertedAmount
+      properties:
+        from:
+          $ref: '#/components/schemas/Currency'
+          example: EUR
+        to:
+          $ref: '#/components/schemas/Currency'
+          example: INR
+        amount:
+          type: number
+          description: Source currency conversion amount
+          example: 100.00
+        rate:
+          type: number
+          description: Calculated exchange rate
+          example: 89.500000
+        convertedAmount:
+          type: number
+          description: Destination amount rounded to 2 decimal places
+          example: 8950.00
+
+    ErrorResponse:
+      type: object
+      required:
+        - statusCode
+        - message
+      properties:
+        statusCode:
+          type: integer
+          example: 400
+        message:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: string
+          example: Bad Request
+        error:
+          type: string
+          example: Bad Request
