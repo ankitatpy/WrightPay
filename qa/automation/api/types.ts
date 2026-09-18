@@ -1,10 +1,10 @@
-export type Currency = 'EUR' | 'GBP' | 'USD' | 'INR' | 'PLN';
+export type Currency = 'EUR' | 'GBP' | 'USD' | 'INR' | 'PLN' | 'AED';
 
 export type CardType = 'debit' | 'credit' | 'DEBIT' | 'CREDIT';
 
 export type CardStatus = 'active' | 'frozen' | 'deactivated' | 'declined' | 'pending';
 
-export type BeneficiaryPayoutMethod = 'BANK_ACCOUNT' | 'UPI';
+export type BeneficiaryPayoutMethod = 'bank_account' | 'upi' | 'BANK_ACCOUNT' | 'UPI';
 
 export type TransactionStatus =
   | 'PENDING'
@@ -64,6 +64,21 @@ export interface CreateTransferRequest {
   destinationCurrency: Currency;
 }
 
+export interface TransferResponse {
+  id: string;
+  reference: string;
+  status: TransactionStatus;
+  recipient: string;
+  sendAmount: number;
+  sourceCurrency: Currency;
+  recipientAmount: number;
+  destinationCurrency: Currency;
+  fee: number;
+  exchangeRate: number;
+  date: string;
+  createdAt: string;
+}
+
 export interface GetTransactionsQuery {
   status?: TransactionStatus;
   reference?: string;
@@ -71,8 +86,52 @@ export interface GetTransactionsQuery {
   offset?: number;
 }
 
+export interface TransactionResponse {
+  id: string;
+  userId: string;
+  reference: string;
+  date: string;
+  recipient: string;
+  amount: number;
+  currency: Currency;
+  senderAmount: number | null;
+  senderCurrency: Currency | null;
+  recipientAmount: number | null;
+  recipientCurrency: Currency | null;
+  fee: number;
+  exchangeRate: number | null;
+  status: TransactionStatus;
+  failureReason: string | null;
+  createdAt: string;
+}
+
+export interface PaginatedTransactionsResponse {
+  items: TransactionResponse[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
 export interface GetQuoteQuery {
   from: Currency;
   to: Currency;
   amount: number;
 }
+
+export interface ExchangeRateResponse {
+  id: string;
+  from: Currency;
+  to: Currency;
+  rate: string;
+  timestamp: string;
+  createdAt: string;
+}
+
+export interface ExchangeRateQuoteResponse {
+  from: Currency;
+  to: Currency;
+  amount: number;
+  rate: number;
+  convertedAmount: number;
+}
+
