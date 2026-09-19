@@ -31,7 +31,7 @@ Welcome to the **WrightPay Quality Assurance & Automation Repository**. This dir
 ├──────────────────────────────────────────┴───────────┴──────────────┴────────────┤
 │ TOTAL VERIFIED FUNCTIONAL TESTS          : 608 / 608 (100% PASS RATE)            │
 │ KNOWN-DEFECT REGRESSION SUITE            : 9 / 9 EXPECTED FAILS (Reproduced)     │
-│ NON-FUNCTIONAL PERFORMANCE SUITE (k6)    : 6 / 6 SCENARIOS VERIFIED (124K+ reqs) │
+│ NON-FUNCTIONAL PERFORMANCE SUITE (k6)    : 6 / 6 SCENARIOS VERIFIED (142,280 total reqs; 124,441 in Scenario B) │
 └──────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -58,7 +58,7 @@ The WrightPay QA architecture is built around three core engineering principles:
 | Artifact / Report | Purpose & Target Focus | File Location |
 |---|---|---|
 | **Master QA Final Report** | Comprehensive 28-section audit of the entire QA engagement | [`qa/QA_FINAL_REPORT.md`](file:///Users/ankitpandey/Desktop/projects/WrightPay/qa/QA_FINAL_REPORT.md) |
-| **Defect Inventory** | Authoritative catalog of all 25 confirmed defects & 2 architectural risks | [`qa/DEFECT_INVENTORY.md`](file:///Users/ankitpandey/Desktop/projects/WrightPay/qa/DEFECT_INVENTORY.md) |
+| **Defect Inventory** | 27 Total Findings Documented: 25 confirmed functional defects (4 Critical, 9 High, 8 Medium, 4 Low) + 2 architectural risks. | [`qa/DEFECT_INVENTORY.md`](file:///Users/ankitpandey/Desktop/projects/WrightPay/qa/DEFECT_INVENTORY.md) |
 | **Test Execution Summary** | Breakdown of the 608 automated test inventory and regression execution | [`qa/TEST_EXECUTION_SUMMARY.md`](file:///Users/ankitpandey/Desktop/projects/WrightPay/qa/TEST_EXECUTION_SUMMARY.md) |
 | **Non-Functional Performance Report** | Measured k6 results: baseline, 8.2K req/s read load, transfers, and races | [`qa/NON_FUNCTIONAL_TEST_REPORT.md`](file:///Users/ankitpandey/Desktop/projects/WrightPay/qa/NON_FUNCTIONAL_TEST_REPORT.md) |
 | **Non-Functional Test Plan** | Workload design, financial constraints, and reliability scenario plan | [`qa/NON_FUNCTIONAL_TEST_PLAN.md`](file:///Users/ankitpandey/Desktop/projects/WrightPay/qa/NON_FUNCTIONAL_TEST_PLAN.md) |

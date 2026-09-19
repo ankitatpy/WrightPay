@@ -14,6 +14,15 @@
 
 ---
 
+## Executive Summary
+
+- **Total HTTP Requests Executed (Scenario B):** 124,441 requests
+- **Total HTTP Requests Executed (All 6 Scenarios):** 142,280 requests
+- **Overall Error Rate (Read Load & Idempotency Races):** 0.00% (0 errors)
+- **Financial Balance Integrity:** 100% verified under concurrent load and race conditions; zero negative balances.
+
+---
+
 ## 1. Test Environment Specifications
 
 - **Operating System:** macOS 15.x (Darwin arm64, Apple Silicon)
