@@ -6,7 +6,7 @@ Welcome to the **WrightPay Quality Assurance & Automation Repository**. This dir
 
 > [!IMPORTANT]
 > **Project Context & Architectural Scope:**  
-> WrightPay was developed as an AI-assisted cross-border payment platform prototype and subsequently subjected to a rigorous, systematic, and independent SDET testing effort.  
+> WrightPay is a cross-border payment platform prototype subjected to a rigorous, systematic, and independent SDET testing effort.  
 > - **Simulated Financial Environment:** WrightPay does *not* interface with live banking payment rails, Visa/Mastercard networks, or actual UPI switches.
 > - **Accounting Model:** The system implements an **atomic wallet balance debit with an append-only transaction ledger**; it is *not* a multi-currency double-entry core banking system.
 > - **Zero Production Modifications:** All test suites, defect reproduction scripts, and performance harnesses operate strictly without modifying production application code.

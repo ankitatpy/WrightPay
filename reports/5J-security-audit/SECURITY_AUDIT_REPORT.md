@@ -10,7 +10,7 @@
 
 ## 1. Executive Summary
 
-This report documents the security, negative-path, authorization, input-validation, and error-handling audit conducted on the **WrightPay V1 AI-assisted backend** during **Step 5J**. WrightPay is a cross-currency remittance platform providing multi-currency wallets, beneficiary management, payment card tokenization, foreign exchange quotations, and asynchronous transfer processing via BullMQ and Redis.
+This report documents the security, negative-path, authorization, input-validation, and error-handling audit conducted on the **WrightPay V1 backend** during **Step 5J**. WrightPay is a cross-currency remittance platform providing multi-currency wallets, beneficiary management, payment card tokenization, foreign exchange quotations, and asynchronous transfer processing via BullMQ and Redis.
 
 The primary objective of this audit was to rigorously evaluate how the connected backend behaves when subjected to hostile, malformed, unauthorized, cross-user, or boundary-violating client requests. A total of **54 dedicated automated security test cases** were executed across 6 test suites, resulting in **54 passed tests (100% pass rate)** with zero regressions against the existing 202-test baseline (bringing the total automated regression baseline to **256 passing tests**).
 

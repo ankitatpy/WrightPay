@@ -9,9 +9,9 @@
 
 ## 1. Executive Summary
 
-The WrightPay V1 backend—an AI-assisted financial remittance and multi-currency digital wallet application built with NestJS, TypeORM, PostgreSQL 15, Redis 7, and BullMQ 5.41—underwent an exhaustive, independent end-to-end quality engineering assessment.
+The WrightPay V1 backend—a financial remittance and multi-currency digital wallet application built with NestJS, TypeORM, PostgreSQL 15, Redis 7, and BullMQ 5.41—underwent an exhaustive, independent end-to-end quality engineering assessment.
 
-The development was conducted with AI assistance and subsequently subjected to independent SDET validation across eleven distinct discovery phases (5A through 5K). Testing validated functional API behavior, database transaction integrity, state transitions, distributed Redis locks, BullMQ queue retry mechanics, cross-domain workflows, negative security boundaries, controlled concurrency, and core financial accounting invariants.
+The engineering effort was subjected to independent SDET validation across eleven distinct discovery phases (5A through 5K). Testing validated functional API behavior, database transaction integrity, state transitions, distributed Redis locks, BullMQ queue retry mechanics, cross-domain workflows, negative security boundaries, controlled concurrency, and core financial accounting invariants.
 
 The test inventory comprises **277 automated tests**. The suite verifies that:
 1. Under nominal conditions and controlled concurrency, PostgreSQL pessimistic row-level locking (`SELECT ... FOR UPDATE`) strictly serializes wallet debits, successfully preventing double-spending, negative balances, and phantom deductions.

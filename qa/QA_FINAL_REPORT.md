@@ -10,7 +10,7 @@
 
 > [!IMPORTANT]
 > **SDET Portfolio & Realistic Scope Disclaimer:**  
-> WrightPay is an AI-assisted cross-border payment platform prototype that was subsequently subjected to an exhaustive, systematic, and independent SDET testing process.  
+> WrightPay is a cross-border payment platform prototype that was subjected to an exhaustive, systematic, and independent SDET testing process.  
 > - WrightPay **does NOT** connect to real banking rails, real card issuing networks (Visa/Mastercard), or live UPI payment switches.
 > - KYC and onboarding flows are client-side demonstrations; 2FA is not implemented.
 > - The wallet ledger is an **atomic wallet balance debit with an append-only transaction ledger**; it is **NOT** a multi-currency double-entry core banking system.
