@@ -10345,12 +10345,12 @@ Traces a real user from initial registration through asynchronous financial sett
 4. **Foreign Exchange Pricing**: Queries `GET /exchange-rates/quote?from=EUR&to=INR&amount=100` confirming reference market rate (89.50) and recipient conversion (8,950.00 INR).
 5. **Transfer Command Execution**: Submits transfer via `POST /transfers` with unique `Idempotency-Key`.
 6. **Immediate Multi-Tier State Assertion**:
-   - HTTP response is `201 Created` with status `PENDING`.
-   - PostgreSQL `transactions` row immediately created with `status = 'PENDING'`, `amount = 100`, `fee = 25`.
+   - HTTP creation response is `201 Created` with initial status `PENDING`.
+   - PostgreSQL `transactions` row persisted with verified financial attributes (`amount = 100`, `fee = 25`, `exchangeRate = 89.5`, `recipientAmount = 8950`).
    - PostgreSQL `wallets` immediately debited from 500 EUR to 375 EUR ($500 - (100 + 25)$).
-   - Redis idempotency record saved with `status = 'COMPLETED'` and cached response.
+   - Redis idempotency record saved with `status = 'COMPLETED'` and cached initial `PENDING` response payload.
    - BullMQ job enqueued to `transfers` queue.
-7. **Asynchronous Processing (Bounded Polling)**: Waits dynamically for BullMQ worker settlement (`PENDING` $	o$ `PROCESSING` $	o$ `COMPLETED`).
+7. **Asynchronous Processing & Synchronization (Bounded Polling)**: Synchronizes against the worker settlement boundary via bounded polling (`PENDING` $\to$ `PROCESSING` $\to$ `COMPLETED`) to eliminate race-prone transient observation points while preserving complete lifecycle verification.
 8. **Final Parity & Invariants**:
    - `GET /transactions/:id` returns `COMPLETED`.
    - `GET /transactions` list includes the transaction.
@@ -10673,6 +10673,124 @@ Controllers use `@Param('id') id: string` without `new ParseUUIDPipe()`. When pa
 
 ---
 
+# STEP 5K — CONCURRENCY, RACE CONDITIONS & QUEUE RELIABILITY
+<a id="step-5k--concurrency-race-conditions--queue-reliability"></a>
+
+### Concurrency Audit Objectives & Methodology
+<a id="step-5k-objectives-and-methodology"></a>
+
+Step 5K assesses whether WrightPay maintains financial and state consistency when multiple operations occur concurrently or when asynchronous queue processing behaves unexpectedly. In payment systems, financial correctness under contention is paramount:
+- **Pessimistic Row Locking (`FOR UPDATE`)**: Validating that concurrent wallet mutations strictly serialize, preventing double-spending and overdrafts.
+- **Distributed Idempotency Synchronization**: Probing Redis `SET NX EX` locks against concurrent duplicate and conflicting transfer submissions.
+- **Asynchronous Queue Reliability**: Observing BullMQ worker retry behavior, exponential backoff, and terminal state transitions under simulated banking failures.
+- **Financial & Ledger Invariants**: Verifying that wallet balance equals initial balance minus total debited amounts, and that a 1:1:1:1 mapping is preserved across API responses, database rows, debits, and unique references.
+- **Queue / Database Failure Window (WP-QA-002)**: Statically auditing the reliability gap between PostgreSQL transaction commit and BullMQ enqueueing.
+
+> [!CRITICAL]
+> **Audit Rule — Observation Without Code Modification:**  
+> In strict accordance with the testing mandate, production business logic, database transactions, locking primitives, Redis helpers, and BullMQ worker code were **not modified**. Discovered gaps are audited and documented as findings, not prematurely patched.
+
+---
+
+### Step 5K Concurrency Test Suite Structure
+
+The concurrency suite comprises 21 automated tests organized into 4 specialized specification files under `qa/automation/tests/concurrency/`:
+
+| Suite File | Scope & Focus | Tests | Key Invariants Verified |
+|---|---|:---:|---|
+| `tests/concurrency/concurrent-transfers.spec.ts` | Same-Wallet Concurrency & Row Locking | 6 | 2-request scarce balance barrier (125 EUR), 8-request overdraft prevention (300 EUR), independent transfers, dirty read prevention, cross-user isolation |
+| `tests/concurrency/idempotency-race.spec.ts` | Redis Idempotency Race Conditions | 6 | 6 concurrent identical requests, conflicting payloads (409 Conflict), cross-user key isolation, cached replay, TTL inspection, early-failure polling gap (WP-QA-007) |
+| `tests/concurrency/queue-reliability.spec.ts` | BullMQ Processing & Worker Retry | 5 | Concurrent job execution, 3-attempt exponential retry backoff, simulated failure lifecycle, no-refund audit (WP-QA-001), commit-before-enqueue contract (WP-QA-002) |
+| `tests/concurrency/financial-invariants.spec.ts` | Mathematical Accounting & Conservation | 4 | Initial $-$ sum(amounts $+$ fees) $==$ Final balance, 1:1:1:1 transaction-debit consistency, zero-balance double-spend exhaustion, 2-decimal fractional precision |
+| **TOTAL** | **4 Concurrency Suites** | **21** | **100% Passing (277 Consolidated Tests)** |
+
+---
+
+### PostgreSQL Locking & Double-Spend Prevention
+
+WrightPay employs explicit pessimistic write locks within `TransfersService.executeTransferTransaction()`:
+```typescript
+// backend/src/modules/transfers/transfers.service.ts
+const wallet = await queryRunner.manager.findOne(Wallet, {
+  where: { id: sourceWalletId, userId },
+  lock: { mode: 'pessimistic_write' }, // Generates SELECT ... FOR UPDATE
+});
+```
+
+#### Observable Concurrency Behavior
+1. **Scarce Balance Barrier (125.00 EUR Balance)**:
+   - Two concurrent transfers of 100.00 EUR + 25.00 EUR fee were launched simultaneously via `Promise.all`.
+   - The PostgreSQL row-level lock forced the second transaction to wait until the first committed.
+   - Upon lock acquisition, the second transaction re-read the updated balance (`0.00 EUR`), evaluated `if (currentBalance < totalDeduction)`, and failed with `400 Bad Request` (`"Insufficient wallet balance"`).
+   - **Result**: Exactly ONE transfer succeeded; wallet balance became `0.00 EUR` and **never negative**. Exactly 1 transaction record was inserted.
+2. **High-Concurrency Overdraft Barrier (8 Requests against 300.00 EUR)**:
+   - 8 simultaneous requests of 50.00 EUR + 25.00 EUR fee (75.00 EUR each, total 600.00 EUR attempted).
+   - Exactly 4 requests succeeded ($4 \times 75 = 300.00$ EUR); exactly 4 failed with `400 Bad Request`.
+   - Final balance was exactly `0.00 EUR`. Zero negative balance or lost updates occurred.
+
+---
+
+### Redis Idempotency Synchronization & Polling Mechanics
+
+The distributed idempotency mechanism in `IdempotencyService` operates via atomic Redis operations:
+1. **Initial Acquisition**: `SET wrightpay:idempotency:transfer:{userId}:{key} {"status":"PROCESSING", ...} EX 60 NX`.
+2. **Concurrent Duplicate Requests**:
+   - Competing requests fail `SET NX` and read the existing record (`status: 'PROCESSING'`).
+   - Callers enter a polling loop: 25 retries with 100ms delay (up to 2.5 seconds).
+   - Once the primary request commits and sets `status: 'COMPLETED'`, pollers receive the cached `201 Created` response.
+   - Tested with 6 simultaneous requests: All received identical transaction IDs and references; exactly one wallet debit occurred.
+3. **Conflicting Payloads**:
+   - A concurrent request reusing an in-flight key with an altered amount (`sendAmount: 75.00` vs `50.00`) detects the SHA-256 hash mismatch and immediately aborts with `409 Conflict` (`"Idempotency key was already used with a different request payload"`).
+4. **Cross-User Isolation**:
+   - Because the Redis namespace incorporates the `userId`, two different users submitting with the exact same `Idempotency-Key` never collide; both succeed independently.
+
+---
+
+### BullMQ Worker Lifecycle & Asynchronous Retries
+
+Transfers transition through an asynchronous state machine:
+- **Normal Flow**: `PENDING` $\rightarrow$ `PROCESSING` (worker pick-up via atomic conditional update) $\rightarrow$ `COMPLETED` (50ms settlement simulation).
+- **Simulated Failure Flow (`SIMULATE_FAILURE`)**:
+  - The worker catches failure, inspects `job.attemptsMade`, and allows BullMQ to retry with exponential backoff (1s initial delay).
+  - Attempt 1 fails $\rightarrow$ Backoff 1000ms $\rightarrow$ Attempt 2 fails $\rightarrow$ Backoff 2000ms $\rightarrow$ Attempt 3 fails.
+  - On the 3rd attempt (`job.attemptsMade >= 2`), status is updated in PostgreSQL to `FAILED` with `failureReason: "Simulated banking settlement failure"`.
+  - Confirmed total duration $\ge 2.5$ seconds (observed ~3.7s).
+
+---
+
+### Queue / Database Reliability Gap (WP-QA-002)
+
+The audit verified the architectural window between database commit and queue enqueueing in `transfers.service.ts`:
+1. `await queryRunner.commitTransaction()` executes at line 175.
+2. `await this.transfersQueue.add(...)` executes at line 188 within a `try/catch` block.
+3. If Redis fails or rejects enqueueing, the catch block merely logs the error and the endpoint returns `201 Created`.
+4. **Impact**: The customer's funds are debited, but the transfer remains permanently orphaned in `PENDING` status with no background worker scheduled to process it.
+5. **Status**: **Architecturally identified and statically confirmed** (no dynamic network sabotage injected).
+
+---
+
+### Concurrency Findings Register
+
+| ID | Title | Severity | Category | Status |
+|---|---|---|---|---|
+| **WP-QA-001** | Missing Automatic Refund on Asynchronous Settlement Failure | **High** | Financial Integrity | Confirmed & Strengthened |
+| **WP-QA-002** | Risk of Orphaned PENDING Transfer via Unhandled BullMQ Enqueue Error | **Medium** | Reliability / Queues | Statically Confirmed Architectural Risk |
+| **WP-QA-007** | Idempotency Polling Gap on Early Lock Deletion Stalls Concurrent Callers (409 Conflict) | **Low** | Concurrency / Idempotency | **CONFIRMED IMPLEMENTATION GAP (NEW)** |
+| **WP-QA-008** | Low Entropy in Transfer Reference Generation Risks Unique Constraint Collision Under Volume | **Low** | Data Architecture / Reliability | **ARCHITECTURAL RISK (NEW)** |
+
+#### Detailed Note on Finding WP-QA-007:
+When a transfer fails validation early (e.g. insufficient funds) and deletes the key (`await this.redisService.del(key)`), a concurrent polling request polling `status === 'PROCESSING'` sees `currentRaw === null`. Because the loop only inspects non-null records, it stalls for all 25 iterations (2.5 seconds) and throws `409 Conflict` claiming the request is "currently processing", rather than failing fast.
+
+---
+
+### Audit Limitations
+
+1. **Controlled Functional Concurrency**: Tests utilized controlled concurrency (2 to 8 concurrent requests) rather than high-load stress testing (k6).
+2. **Network Partitions**: CAP-theorem network partitions between the application and Redis were not dynamically injected.
+3. **Database Architecture**: Single-node PostgreSQL instance; multi-region replication lag was out of scope.
+
+---
+
 # Part 25 — Current Progress
 
 ### Completed Steps
@@ -10690,17 +10808,162 @@ Controllers use `@Param('id') id: string` without `new ParseUUIDPipe()`. When pa
 - **Step 5H**: Exchange Rates Domain API Testing (42 tests).
 - **Step 5I**: Cross-Domain Integration Testing (13 tests).
 - **Step 5J**: Backend Security & Negative-Path Audit (54 tests).
+- **Step 5K**: Concurrency, Race Conditions & Queue Reliability Audit (21 tests).
 - **Documentation**: Living Master Learning & Reference Guide (`QA_AUTOMATION_FRAMEWORK_GUIDE.md`).
-- **QA Report Artifacts**: Formal reports in `reports/5J-security-audit/` (`SECURITY_AUDIT_REPORT.md`, `SECURITY_FINDINGS.md`, `TEST_EXECUTION_SUMMARY.md`).
+- **QA Report Artifacts**: Formal reports in:
+  - `reports/5J-security-audit/`
+  - `reports/5K-concurrency-reliability/` (`CONCURRENCY_AUDIT_REPORT.md`, `CONCURRENCY_FINDINGS.md`, `TEST_EXECUTION_SUMMARY.md`).
 
-> **Explicit Status Confirmation**: Step 5J Backend Security & Negative-Path Audit is **COMPLETED** (**256 total tests passing**, 0 regressions, clean TypeScript typecheck). Work stops here pending user review.
+> **Explicit Status Confirmation**: Step 5K Concurrency, Race Conditions & Queue Reliability is **COMPLETED** (**277 total tests passing**, 0 regressions, clean TypeScript typecheck). Work stops here pending user review.
 
 ---
 
-# Part 26 — Future Documentation Sections
+# Part 26 — Final Backend QA — Findings Consolidation
 
-The following sections will be appended to this living document as the WrightPay test automation framework expands:
+## Final Baseline & Scope Summary
 
-- **Step 5K — Concurrency, Race Conditions & Reliability Testing**: Simultaneous double-spend transfer attempts and pessimistic locking verification.
-- **Frontend / UI Testing**: Next.js Playwright UI automation utilizing Page Object Models (`pages/`).
-- **CI/CD & Reporting**: GitHub Actions workflow automation, artifact collection, and automated test dashboard reporting.
+The WrightPay V1 backend QA automation campaign concluded with the completion of all 11 planned discovery and reliability phases (Steps 5A through 5K). The frozen QA automation baseline consists of **277 automated tests** across **22 specification files**, supported by TypeScript compile-time typechecking and direct cross-layer database/Redis/BullMQ verification.
+
+### Cumulative Phase Execution Breakdown
+
+| Phase | Domain / Subsystem | Spec Files | Test Count | Isolation Pass | Canonical Status |
+|:---|:---|:---|---:|:---:|:---:|
+| **Infra/Smoke** | Data Store & Pipeline Baseline | `smoke.spec.ts`, `proof-of-life.spec.ts`, `database.spec.ts`, `redis.spec.ts`, `bullmq.spec.ts`, `config.spec.ts` | 6 | 6 / 6 (100%) | Verified |
+| **Step 5A** | Authentication & Session Lifecycle | `tests/auth/auth.spec.ts` | 19 | 19 / 19 (100%) | Verified |
+| **Step 5B** | Users Profile & Access Control | `tests/users/users.spec.ts` | 12 | 12 / 12 (100%) | Verified |
+| **Step 5C** | Wallet Invariants & Precision | `tests/wallet/wallet.spec.ts` | 8 | 8 / 8 (100%) | Verified |
+| **Step 5D** | Cards Lifecycle & PIN Security | `tests/cards/cards.spec.ts` | 19 | 19 / 19 (100%) | Verified |
+| **Step 5E** | Beneficiary Management & Rules | `tests/beneficiaries/beneficiaries.spec.ts` | 25 | 25 / 25 (100%) | Verified |
+| **Step 5F** | Transfers & Idempotency Engine | `tests/transfers/transfers.spec.ts` | 30 | 30 / 30 (100%) | Verified |
+| **Step 5G** | Transactions Ledger & Pagination | `tests/transactions/transactions.spec.ts` | 28 | 28 / 28 (100%) | Verified |
+| **Step 5H** | Exchange Rates & FX Engine | `tests/exchange-rates/exchange-rates.spec.ts` | 42 | 42 / 42 (100%) | Verified |
+| **Step 5I** | Cross-Domain E2E Journeys | `tests/integration/cross-domain.spec.ts` | 13 | 13 / 13 (100%) | Verified |
+| **Step 5J** | Security & Negative-Path Audit | `tests/security/auth-bypass.spec.ts`<br>`tests/security/idor-matrix.spec.ts`<br>`tests/security/input-validation.spec.ts`<br>`tests/security/error-handling-500.spec.ts` | 54 | 54 / 54 (100%) | Verified |
+| **Step 5K** | Concurrency, Races & Queue Reliability | `tests/concurrency/concurrent-transfers.spec.ts`<br>`tests/concurrency/idempotency-race.spec.ts`<br>`tests/concurrency/queue-reliability.spec.ts`<br>`tests/concurrency/financial-invariants.spec.ts` | 21 | 21 / 21 (100%) | Verified |
+| **TOTAL** | **Full Canonical QA Automation Suite** | **22 Spec Files** | **277** | **277 / 277 (100%)** | **FROZEN BASELINE** |
+
+---
+
+## Master Findings Consolidation (WP-QA-001 through WP-QA-008)
+
+Eight technical findings were consolidated, classified, and verified during the backend discovery campaign. No backend production code was modified during discovery; all findings remain open for the upcoming Defect Fix & Verification Phase.
+
+| ID | Severity | Classification | Summary & Impact | Evidence Type | Primary Test / Spec File |
+|:---|:---|:---|:---|:---|:---|
+| **WP-QA-001** | **High** | CONFIRMED DEFECT | **Missing Automatic Refund on Settlement Failure**: When asynchronous transfer processing permanently fails (`SIMULATE_FAILURE`), status transitions to `FAILED` but customer funds and fees remain deducted from the wallet with no automatic compensation. | Automated Test + DB Evidence | `tests/concurrency/queue-reliability.spec.ts`<br>`tests/integration/cross-domain.spec.ts` |
+| **WP-QA-002** | **Medium** | ARCHITECTURAL RISK | **Potential Orphaned PENDING Transfer**: `TransfersService` commits wallet debit in PostgreSQL (`commitTransaction`) before enqueueing BullMQ job (`transfersQueue.add`). An unhandled queue rejection or Redis partition leaves transfers permanently orphaned in `PENDING`. | Static Code / Architectural Analysis | `transfers.service.ts:175-211`<br>`tests/concurrency/queue-reliability.spec.ts` |
+| **WP-QA-003** | **Medium** | CONFIRMED DEFECT | **Unhandled PostgreSQL UUID 500 Errors**: Passing non-UUID alphanumeric strings to path parameters on 6 endpoints triggers unhandled PostgreSQL `22P02` syntax errors, returning HTTP 500 instead of controlled 400 or 404 responses. | Automated Test + HTTP Response Evidence | `tests/security/error-handling-500.spec.ts` |
+| **WP-QA-004** | **Low** | API CONTRACT DISCREPANCY | **Exchange Rate Serialization Type**: `GET /exchange-rates` returns `rate` as a string (`"1.0900"`) while the OpenAPI 3.0 specification documents `type: number`. TypeORM `decimal` column is unmapped to numeric representation. | Automated Test + Response Schema Evidence | `tests/exchange-rates/exchange-rates.spec.ts` |
+| **WP-QA-005** | **Low** | CONFIRMED DEFECT | **Whitespace-Only Beneficiary Name**: `POST /beneficiaries` accepts whitespace-only name strings (`"   "`), trims them to empty string `""`, and persists them to PostgreSQL due to absence of `@IsNotEmpty()` on DTO. | Automated Test + DB Evidence | `tests/beneficiaries/beneficiaries.spec.ts` |
+| **WP-QA-006** | **Low** | OBSERVATION | **Global ValidationPipe Configuration**: `ValidationPipe` utilizes `whitelist: true` but omits `forbidNonWhitelisted: true`. Unknown payload attributes are silently stripped rather than rejected with `400 Bad Request`. | Automated Test + Config Inspection | `main.ts:24`<br>`tests/security/input-validation.spec.ts` |
+| **WP-QA-007** | **Low** | CONFIRMED IMPLEMENTATION GAP | **Concurrent Idempotency Polling Gap**: When an in-flight transfer fails early (e.g., insufficient balance), the primary worker deletes the Redis lock. Concurrent polling requests stall for 2.5s and receive a misleading `409 Conflict` claiming the request is processing. | Automated Test + Redis Polling Evidence | `tests/concurrency/idempotency-race.spec.ts` |
+| **WP-QA-008** | **Low** | ARCHITECTURAL RISK | **Transfer Reference Entropy Collision Risk**: Transfer references (`generateReference()`) utilize 32 bits of pseudo-random entropy (`WP-` + 8 hex chars). Under sustained high transfer volume, birthday bound collisions will occur against the database unique constraint. | Static Code / Mathematical Analysis | `transfers.service.ts:18-20` |
+
+---
+
+## Finding Traceability & Evidence Sources
+
+- **Automated Evidence**: Findings WP-QA-001, WP-QA-003, WP-QA-004, WP-QA-005, WP-QA-006, and WP-QA-007 are directly verified and reproduced by executable Playwright automated tests with HTTP responses, database rows, and Redis state logged to disk.
+- **Static Code / Architectural Evidence**: Findings WP-QA-002 and WP-QA-008 are structural architectural risks substantiated by direct source-code inspection in `transfers.service.ts` and probability calculations.
+
+---
+
+## Framework Limitations & Scope Boundaries
+
+1. **Environment Scope**: Executed against local single-node runtime (`http://localhost:3001/api/v1`, single PostgreSQL 15 container, single Redis 7 container). Multi-region replication latency and cluster failovers were not exercised.
+2. **Banking Rails**: Bank settlements are simulated via mock worker logic; external clearinghouse webhooks (SEPA, Faster Payments, UPI) were not integrated.
+3. **Load Profile**: Tests exercised functional concurrency and race conditions (2 to 8 simultaneous requests); production-scale stress testing (DDoS, >10,000 req/sec) requires dedicated performance tools (k6/Gatling).
+4. **Security Assessment**: Step 5J was an automated application-level security audit; it does not replace a manual penetration test by certified security specialists.
+
+---
+
+## Canonical QA Artifacts Reference
+
+All final QA documentation is consolidated in the `reports/final-backend-qa/` directory:
+
+- **`FINAL_BACKEND_QA_REPORT.md`**: Canonical, portfolio-quality final backend QA report.
+- **`MASTER_FINDINGS_REGISTER.md`**: Comprehensive defect, gap, and risk register with full preconditions, reproduction steps, and remediation guidance.
+- **`FINDING_TRACEABILITY.md`**: Complete traceability matrix mapping findings to automated tests, evidence, and contract requirements.
+- **`TEST_EXECUTION_SUMMARY.md`**: Formal test execution log, environment specifications, and failure analysis.
+
+---
+
+# Part 27 — Known Defect Regression Suite
+
+## Purpose & Architecture
+The Known Defect Regression Suite (`qa/automation/tests/defects/`) provides executable, reproducible specifications for active, unresolved quality findings without weakening existing baseline tests or modifying production code.
+
+Rather than disguising known defects as ordinary passing tests or leaving the canonical 277-test baseline permanently red, the suite leverages Playwright's native `test.fail()` semantic combined with structured annotations (`test.info().annotations`). This ensures:
+1. **Defect Persistence Verification**: CI validates that known defects are genuinely present in the runtime; if a defect is unexpectedly absent or fixed, Playwright immediately fails the run with `"Expected to fail, but passed"`.
+2. **Clear Defect Graduation**: When an engineer resolves a defect in production code, the test fails, signaling that the defect is fixed. The engineer then removes `test.fail()` and graduates the test into the canonical baseline suite.
+3. **No Baseline Pollution**: The canonical baseline remains strictly frozen at **277 passing tests** (`npx playwright test`), while the defect suite runs independently via `npm run test:defects` (`npx playwright test --config=playwright.defects.config.ts`).
+
+---
+
+## Naming Convention
+Defect regression specifications follow the standardized pattern:
+```text
+qa/automation/tests/defects/wp-qa-<id>-<short-description>.spec.ts
+```
+Active Specifications:
+- `wp-qa-001-settlement-refund.spec.ts`
+- `wp-qa-003-uuid-error-handling.spec.ts`
+- `wp-qa-005-whitespace-beneficiary.spec.ts`
+- `wp-qa-007-idempotency-race-waiter.spec.ts`
+
+---
+
+## Active Findings & Expected vs. Actual Matrix
+
+| Finding ID | Specification File | Severity | Expected Behavior | Actual Current Behavior | Defect Status |
+|:---|:---|:---:|:---|:---|:---:|
+| **WP-QA-001** | `wp-qa-001-settlement-refund.spec.ts` | **High** | When asynchronous settlement fails, deducted funds ($50 amount + $25 fee = $75 total) must be automatically restored to customer's wallet balance (400 EUR), and a compensating audit record logged in PostgreSQL. | Transaction transitions to `FAILED`, but customer wallet remains permanently debited at 325 EUR with zero compensating refund records. | Reproducible (`test.fail`) |
+| **WP-QA-002** | *Architectural Finding* | **Medium** | State mutation must not commit in PostgreSQL if subsequent BullMQ job enqueueing cannot be guaranteed (Transactional Outbox pattern). | Database transaction commits before BullMQ enqueue; unhandled queue error logs and leaves transfer orphaned in `PENDING`. | Statically Documented |
+| **WP-QA-003** | `wp-qa-003-uuid-error-handling.spec.ts` | **Medium** | Path parameters with non-UUID syntax (`not-a-valid-uuid`, `12345`) must be validated at controller boundary and return controlled HTTP 400 Bad Request or 404 Not Found. | Unvalidated string reaches PostgreSQL, causing `22P02 invalid input syntax for type uuid` and unhandled HTTP 500 Internal Server Error across 6 endpoints. | Reproducible (`test.fail`) |
+| **WP-QA-004** | *Existing Contract Suite* | **Low** | `GET /exchange-rates` must return `rate` as numeric JSON type per OpenAPI 3.0 specification (`type: number`). | Endpoint serializes `rate` as string (`"1.0900"`). Covered by `tests/exchange-rates/exchange-rates.spec.ts:60`. | Existing Test Evidence |
+| **WP-QA-005** | `wp-qa-005-whitespace-beneficiary.spec.ts` | **Low** | `POST /beneficiaries` with whitespace-only names (`"   "`, `"\t\t\n"`) must be rejected with HTTP 400 Bad Request; zero empty-name records persisted. | DTO lacks `@IsNotEmpty()`, service trims to `""`, returns HTTP 201 Created, and persists empty string `name: ""` in PostgreSQL. | Reproducible (`test.fail`) |
+| **WP-QA-006** | *Existing Input Suite* | **Low** | Unknown payload fields should be rejected with HTTP 400 Bad Request (`forbidNonWhitelisted: true`). | Global `ValidationPipe` silently strips unknown fields rather than rejecting. Covered by `tests/security/input-validation.spec.ts:183`. | Existing Test Evidence |
+| **WP-QA-007** | `wp-qa-007-idempotency-race-waiter.spec.ts` | **Low** | When a primary transfer request fails validation early and deletes its Redis lock, concurrent waiters should fail fast (< 1000ms) with non-409 status. | Concurrent waiter polling loop sees `key = null`, stalls for full 2.5s (25 iterations), and throws `409 Conflict ("currently processing")`. | Reproducible (`test.fail`) |
+| **WP-QA-008** | *Architectural Finding* | **Low** | Transfer references must possess high entropy (>= 64 bits) to prevent duplicate key collisions under enterprise transaction volume. | `generateReference()` uses 32 bits of pseudo-random entropy (`crypto.randomBytes(4)`), causing birthday bound risk at ~77,000 daily transfers. | Statically Documented |
+
+---
+
+## CI & Reporting Integration Strategy
+
+In CI pipelines (GitHub Actions), testing is divided into two distinct gates:
+
+### Gate 1: Baseline Verification (Passing Gate)
+```bash
+npm run test:baseline
+```
+- Executes all 277 canonical tests (`testsDir: './tests'`, `testIgnore: ['**/tests/defects/**']`).
+- Target: **277 / 277 PASS (100%)**.
+- CI Action: **Fails build if any regression occurs in established baseline behavior.**
+
+### Gate 2: Known Defect Verification (Defect Tracking Gate)
+```bash
+npm run test:defects
+```
+- Executes the dedicated defect regression specifications (`playwright.defects.config.ts`).
+- Generates structured JSON report: `reports/defect-test-results.json` containing:
+  - `annotations[issue]` = `WP-QA-XXX`
+  - `annotations[status]` = `UNRESOLVED`
+  - `annotations[expected]` = Expected behavior description
+  - `annotations[actual]` = Actual observed defect
+- Target: All defect tests execute, assert expected behavior, and fail as expected (`test.fail()` passes with exit code 0).
+- CI Action:
+  - If a test **passes** (i.e. Expected to fail, but passed), CI alerts the engineering team: `"Finding WP-QA-XXX has been resolved in backend code. Please graduate test to baseline."`
+  - If a test encounters an unhandled infrastructure error or syntax error, CI fails.
+
+---
+
+# Part 28 — Future Documentation Sections
+
+The following sections will be appended to this living document in future project phases:
+
+- **Phase 6: Defect Remediation & Verification**: Automated regression re-runs following backend production code fixes for findings WP-QA-001 through WP-QA-008.
+- **Phase 7: Frontend / UI Automation**: Next.js Playwright UI test suite utilizing Page Object Models (`pages/`).
+- **Phase 8: CI/CD Pipeline & GitHub Actions**: Continuous integration workflow automation, parallel test sharding, and artifact archiving.
+
+
+

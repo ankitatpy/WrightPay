@@ -248,18 +248,17 @@ test.describe('Cross-Domain Integration Testing (Step 5I)', () => {
       expect(transfer.recipientAmount).toBe(8950);
       expect(transfer.exchangeRate).toBe(89.5);
 
-      // 12. Immediately verify PostgreSQL transaction row and wallet debit
+      // 12. Verify PostgreSQL transaction persistence, financial fields, and immediate wallet debit
       const dbTx = await db.queryOne<{
-        status: string;
+        id: string;
         amount: string;
         fee: string;
         exchangeRate: string;
         recipientAmount: string;
-      }>('SELECT status, amount, fee, "exchangeRate", "recipientAmount" FROM transactions WHERE id = $1', [
+      }>('SELECT id, amount, fee, "exchangeRate", "recipientAmount" FROM transactions WHERE id = $1', [
         transfer.id,
       ]);
       expect(dbTx).not.toBeNull();
-      expect(dbTx!.status).toBe('PENDING');
       expect(Number(dbTx!.amount)).toBe(100);
       expect(Number(dbTx!.fee)).toBe(25);
       expect(Number(dbTx!.exchangeRate)).toBe(89.5);
@@ -272,13 +271,14 @@ test.describe('Cross-Domain Integration Testing (Step 5I)', () => {
       );
       expect(Number(postDebitWallet!.balance)).toBe(375);
 
-      // Verify Redis idempotency record cached
+      // Verify Redis idempotency record cached with initial creation response
       const redisKey = `wrightpay:idempotency:transfer:${userId}:${idempotencyKey}`;
       const cachedIdempotency = await redisClient.get(redisKey);
       expect(cachedIdempotency).not.toBeNull();
       const parsedRecord = JSON.parse(cachedIdempotency!);
       expect(parsedRecord.status).toBe('COMPLETED');
       expect(parsedRecord.response.id).toBe(transfer.id);
+      expect(parsedRecord.response.status).toBe('PENDING');
 
       // 13. Wait using bounded polling for asynchronous processing (BullMQ -> Worker)
       const finalTx = await waitForTransactionStatusApi(

@@ -5,8 +5,12 @@
   "description": "Playwright Test automation framework for WrightPay",
   "scripts": {
     "test": "playwright test",
+    "test:baseline": "playwright test",
+    "test:defects": "playwright test --config=playwright.defects.config.ts",
     "test:headed": "playwright test --headed",
-    "test:ui": "playwright test --ui",
+    "test:ui": "playwright test --config=playwright.ui.config.ts",
+    "test:ui:smoke": "playwright test --config=playwright.ui.config.ts tests/ui/smoke",
+    "test:ui:interactive": "playwright test --config=playwright.ui.config.ts --ui",
     "test:report": "playwright show-report reports/html-report",
     "typecheck": "tsc --noEmit"
   },

@@ -6,6 +6,8 @@ import { config } from './config/env.config';
  */
 export default defineConfig({
   testDir: './tests',
+  /* Exclude known defect regressions and UI specifications from canonical backend baseline suite */
+  testIgnore: ['**/tests/defects/**', '**/tests/ui/**'],
   /* Maximum time one test can run for. */
   timeout: config.timeout,
   expect: {
