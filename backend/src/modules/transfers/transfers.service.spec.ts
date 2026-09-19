@@ -42,7 +42,7 @@ describe('TransfersService', () => {
     currency: Currency.INR,
     payoutMethod: BeneficiaryPayoutMethod.BANK_ACCOUNT,
     accountNumber: 'IN123456789',
-    deletedAt: null,
+    deletedAt: undefined,
   };
 
   const mockUpiBeneficiary: Partial<Beneficiary> = {
@@ -52,7 +52,7 @@ describe('TransfersService', () => {
     currency: Currency.INR,
     payoutMethod: BeneficiaryPayoutMethod.UPI,
     upiId: 'aarav@upi',
-    deletedAt: null,
+    deletedAt: undefined,
   };
 
   let mockQueryRunner: any;

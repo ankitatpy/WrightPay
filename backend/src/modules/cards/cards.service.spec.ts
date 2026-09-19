@@ -17,7 +17,7 @@ describe('CardsService', () => {
     type: CardType.DEBIT,
     createdAt: new Date(),
     updatedAt: new Date(),
-    user: null,
+    user: null as any,
   };
 
   const mockRepository = {

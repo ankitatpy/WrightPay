@@ -1,0 +1,517 @@
+{
+  "/": [
+    {
+      "id": "heading-order",
+      "impact": "moderate",
+      "description": "Ensure the order of headings is semantically correct",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.13/heading-order?application=playwright",
+      "page": "http://localhost:3000/",
+      "nodes": [
+        {
+          "target": [
+            "div:nth-child(1) > h4"
+          ],
+          "html": "<h4 class=\"font-semibold text-slate-900 mb-3\">Product</h4>",
+          "failureSummary": "Fix any of the following:\n  Heading order invalid"
+        }
+      ]
+    },
+    {
+      "id": "landmark-one-main",
+      "impact": "moderate",
+      "description": "Ensure the document has a main landmark",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.13/landmark-one-main?application=playwright",
+      "page": "http://localhost:3000/",
+      "nodes": [
+        {
+          "target": [
+            "html"
+          ],
+          "html": "<html lang=\"en\" class=\"geist_a71539c9-module__T19VSG__variable geist_mono_8d43a2aa-module__8Li5zG__variable h-full antialiased\">",
+          "failureSummary": "Fix all of the following:\n  Document does not have a main landmark"
+        }
+      ]
+    },
+    {
+      "id": "region",
+      "impact": "moderate",
+      "description": "Ensure all page content is contained by landmarks",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.13/region?application=playwright",
+      "page": "http://localhost:3000/",
+      "nodes": [
+        {
+          "target": [
+            ".bg-gradient-to-b"
+          ],
+          "html": "<section class=\"bg-gradient-to-b from-slate-50 to-white py-20\">",
+          "failureSummary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".py-16:nth-child(3)"
+          ],
+          "html": "<section class=\"py-16 bg-white\">",
+          "failureSummary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".bg-slate-900"
+          ],
+          "html": "<section class=\"py-16 bg-slate-900 text-white\">",
+          "failureSummary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        }
+      ]
+    }
+  ],
+  "/login": [
+    {
+      "id": "landmark-one-main",
+      "impact": "moderate",
+      "description": "Ensure the document has a main landmark",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.13/landmark-one-main?application=playwright",
+      "page": "http://localhost:3000/login",
+      "nodes": [
+        {
+          "target": [
+            "html"
+          ],
+          "html": "<html lang=\"en\" class=\"geist_a71539c9-module__T19VSG__variable geist_mono_8d43a2aa-module__8Li5zG__variable h-full antialiased\">",
+          "failureSummary": "Fix all of the following:\n  Document does not have a main landmark"
+        }
+      ]
+    },
+    {
+      "id": "region",
+      "impact": "moderate",
+      "description": "Ensure all page content is contained by landmarks",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.13/region?application=playwright",
+      "page": "http://localhost:3000/login",
+      "nodes": [
+        {
+          "target": [
+            ".mb-8"
+          ],
+          "html": "<div class=\"mb-8\"><h1 class=\"text-3xl font-bold text-slate-900\">WrightPay</h1><p class=\"text-slate-600 mt-2\">Cross-border payments made simple</p></div>",
+          "failureSummary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            "form > div:nth-child(1)"
+          ],
+          "html": "<div>",
+          "failureSummary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            "form > div:nth-child(2)"
+          ],
+          "html": "<div>",
+          "failureSummary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".justify-between"
+          ],
+          "html": "<div class=\"flex items-center justify-between\">",
+          "failureSummary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".pt-6"
+          ],
+          "html": "<div class=\"mt-6 pt-6 border-t border-slate-200\"><p class=\"text-center text-slate-600 text-sm\">Don't have an account?<!-- --> <a class=\"text-blue-600 font-medium hover:text-blue-700\" href=\"/signup\">Create one</a></p></div>",
+          "failureSummary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".text-xs"
+          ],
+          "html": "<p class=\"text-center text-slate-600 text-xs mt-6\">By signing in, you agree to our Terms of Service and Privacy Policy</p>",
+          "failureSummary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        }
+      ]
+    }
+  ],
+  "/signup": [
+    {
+      "id": "landmark-one-main",
+      "impact": "moderate",
+      "description": "Ensure the document has a main landmark",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.13/landmark-one-main?application=playwright",
+      "page": "http://localhost:3000/signup",
+      "nodes": [
+        {
+          "target": [
+            "html"
+          ],
+          "html": "<html lang=\"en\" class=\"geist_a71539c9-module__T19VSG__variable geist_mono_8d43a2aa-module__8Li5zG__variable h-full antialiased\">",
+          "failureSummary": "Fix all of the following:\n  Document does not have a main landmark"
+        }
+      ]
+    },
+    {
+      "id": "region",
+      "impact": "moderate",
+      "description": "Ensure all page content is contained by landmarks",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.13/region?application=playwright",
+      "page": "http://localhost:3000/signup",
+      "nodes": [
+        {
+          "target": [
+            ".mb-8"
+          ],
+          "html": "<div class=\"mb-8\"><h1 class=\"text-3xl font-bold text-slate-900\">WrightPay</h1><p class=\"text-slate-600 mt-2\">Create your account</p></div>",
+          "failureSummary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".grid"
+          ],
+          "html": "<div class=\"grid grid-cols-2 gap-4\">",
+          "failureSummary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            "form > div:nth-child(2)"
+          ],
+          "html": "<div>",
+          "failureSummary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            "form > div:nth-child(3)"
+          ],
+          "html": "<div>",
+          "failureSummary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            "div:nth-child(4)"
+          ],
+          "html": "<div>",
+          "failureSummary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".items-start"
+          ],
+          "html": "<label class=\"flex items-start gap-2\"><input type=\"checkbox\" class=\"w-4 h-4 border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 mt-1\" name=\"agreeTerms\"><span class=\"text-sm text-slate-600\">I agree to the Terms of Service and Privacy Policy</span></label>",
+          "failureSummary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".pt-6"
+          ],
+          "html": "<div class=\"mt-6 pt-6 border-t border-slate-200\"><p class=\"text-center text-slate-600 text-sm\">Already have an account?<!-- --> <a class=\"text-blue-600 font-medium hover:text-blue-700\" href=\"/login\">Sign in</a></p></div>",
+          "failureSummary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        }
+      ]
+    }
+  ],
+  "/dashboard": [
+    {
+      "id": "color-contrast",
+      "impact": "serious",
+      "description": "Ensure the contrast between foreground and background colors meets WCAG 2 AA minimum contrast ratio thresholds",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.13/color-contrast?application=playwright",
+      "page": "http://localhost:3000/dashboard",
+      "nodes": [
+        {
+          "target": [
+            ".ml-2:nth-child(7)"
+          ],
+          "html": "<span class=\"text-slate-500 ml-2\">Live rates</span>",
+          "failureSummary": "Fix any of the following:\n  Element has insufficient color contrast of 3.74 (foreground color: #62748e, background color: #0f172b, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1"
+        },
+        {
+          "target": [
+            ".transition-all.p-6.dark\\:text-slate-100:nth-child(2) > .items-start.mb-8.justify-between > .dark\\:text-slate-500.text-slate-400.text-2xl"
+          ],
+          "html": "<div class=\"text-2xl font-bold text-slate-400 dark:text-slate-500\">GBP</div>",
+          "failureSummary": "Fix any of the following:\n  Element has insufficient color contrast of 2.63 (foreground color: #90a1b9, background color: #ffffff, font size: 18.0pt (24px), font weight: bold). Expected contrast ratio of 3:1"
+        },
+        {
+          "target": [
+            ".transition-all.p-6.dark\\:text-slate-100:nth-child(3) > .items-start.mb-8.justify-between > .dark\\:text-slate-500.text-slate-400.text-2xl"
+          ],
+          "html": "<div class=\"text-2xl font-bold text-slate-400 dark:text-slate-500\">USD</div>",
+          "failureSummary": "Fix any of the following:\n  Element has insufficient color contrast of 2.63 (foreground color: #90a1b9, background color: #ffffff, font size: 18.0pt (24px), font weight: bold). Expected contrast ratio of 3:1"
+        },
+        {
+          "target": [
+            ".transition-all.p-6.dark\\:text-slate-100:nth-child(4) > .items-start.mb-8.justify-between > .dark\\:text-slate-500.text-slate-400.text-2xl"
+          ],
+          "html": "<div class=\"text-2xl font-bold text-slate-400 dark:text-slate-500\">AED</div>",
+          "failureSummary": "Fix any of the following:\n  Element has insufficient color contrast of 2.63 (foreground color: #90a1b9, background color: #ffffff, font size: 18.0pt (24px), font weight: bold). Expected contrast ratio of 3:1"
+        },
+        {
+          "target": [
+            ".transition-all.p-6.dark\\:text-slate-100:nth-child(5) > .items-start.mb-8.justify-between > .dark\\:text-slate-500.text-slate-400.text-2xl"
+          ],
+          "html": "<div class=\"text-2xl font-bold text-slate-400 dark:text-slate-500\">PLN</div>",
+          "failureSummary": "Fix any of the following:\n  Element has insufficient color contrast of 2.63 (foreground color: #90a1b9, background color: #ffffff, font size: 18.0pt (24px), font weight: bold). Expected contrast ratio of 3:1"
+        },
+        {
+          "target": [
+            ".transition-all.p-6.dark\\:text-slate-100:nth-child(6) > .items-start.mb-8.justify-between > .dark\\:text-slate-500.text-slate-400.text-2xl"
+          ],
+          "html": "<div class=\"text-2xl font-bold text-slate-400 dark:text-slate-500\">INR</div>",
+          "failureSummary": "Fix any of the following:\n  Element has insufficient color contrast of 2.63 (foreground color: #90a1b9, background color: #ffffff, font size: 18.0pt (24px), font weight: bold). Expected contrast ratio of 3:1"
+        }
+      ]
+    }
+  ],
+  "/dashboard/wallets": [
+    {
+      "id": "color-contrast",
+      "impact": "serious",
+      "description": "Ensure the contrast between foreground and background colors meets WCAG 2 AA minimum contrast ratio thresholds",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.13/color-contrast?application=playwright",
+      "page": "http://localhost:3000/dashboard/wallets",
+      "nodes": [
+        {
+          "target": [
+            "div:nth-child(2) > .transition-all.p-6.bg-white > .items-start.justify-between.mb-8 > .text-slate-400.dark\\:text-slate-500.text-2xl"
+          ],
+          "html": "<div class=\"text-2xl font-bold text-slate-400 dark:text-slate-500\">GBP</div>",
+          "failureSummary": "Fix any of the following:\n  Element has insufficient color contrast of 2.63 (foreground color: #90a1b9, background color: #ffffff, font size: 18.0pt (24px), font weight: bold). Expected contrast ratio of 3:1"
+        },
+        {
+          "target": [
+            "div:nth-child(3) > .transition-all.p-6.bg-white > .items-start.justify-between.mb-8 > .text-slate-400.dark\\:text-slate-500.text-2xl"
+          ],
+          "html": "<div class=\"text-2xl font-bold text-slate-400 dark:text-slate-500\">USD</div>",
+          "failureSummary": "Fix any of the following:\n  Element has insufficient color contrast of 2.63 (foreground color: #90a1b9, background color: #ffffff, font size: 18.0pt (24px), font weight: bold). Expected contrast ratio of 3:1"
+        },
+        {
+          "target": [
+            "div:nth-child(4) > .transition-all.p-6.bg-white > .items-start.justify-between.mb-8 > .text-slate-400.dark\\:text-slate-500.text-2xl"
+          ],
+          "html": "<div class=\"text-2xl font-bold text-slate-400 dark:text-slate-500\">AED</div>",
+          "failureSummary": "Fix any of the following:\n  Element has insufficient color contrast of 2.63 (foreground color: #90a1b9, background color: #ffffff, font size: 18.0pt (24px), font weight: bold). Expected contrast ratio of 3:1"
+        },
+        {
+          "target": [
+            "div:nth-child(5) > .transition-all.p-6.bg-white > .items-start.justify-between.mb-8 > .text-slate-400.dark\\:text-slate-500.text-2xl"
+          ],
+          "html": "<div class=\"text-2xl font-bold text-slate-400 dark:text-slate-500\">PLN</div>",
+          "failureSummary": "Fix any of the following:\n  Element has insufficient color contrast of 2.63 (foreground color: #90a1b9, background color: #ffffff, font size: 18.0pt (24px), font weight: bold). Expected contrast ratio of 3:1"
+        },
+        {
+          "target": [
+            "div:nth-child(6) > .transition-all.p-6.bg-white > .items-start.justify-between.mb-8 > .text-slate-400.dark\\:text-slate-500.text-2xl"
+          ],
+          "html": "<div class=\"text-2xl font-bold text-slate-400 dark:text-slate-500\">INR</div>",
+          "failureSummary": "Fix any of the following:\n  Element has insufficient color contrast of 2.63 (foreground color: #90a1b9, background color: #ffffff, font size: 18.0pt (24px), font weight: bold). Expected contrast ratio of 3:1"
+        }
+      ]
+    },
+    {
+      "id": "heading-order",
+      "impact": "moderate",
+      "description": "Ensure the order of headings is semantically correct",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.13/heading-order?application=playwright",
+      "page": "http://localhost:3000/dashboard/wallets",
+      "nodes": [
+        {
+          "target": [
+            "h3"
+          ],
+          "html": "<h3 class=\"font-semibold text-slate-900 dark:text-white mb-2\">Coming Soon</h3>",
+          "failureSummary": "Fix any of the following:\n  Heading order invalid"
+        }
+      ]
+    },
+    {
+      "id": "scrollable-region-focusable",
+      "impact": "serious",
+      "description": "Ensure elements that have scrollable content are accessible by keyboard in Safari",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.13/scrollable-region-focusable?application=playwright",
+      "page": "http://localhost:3000/dashboard/wallets",
+      "nodes": [
+        {
+          "target": [
+            "main"
+          ],
+          "html": "<main class=\"flex-1 overflow-auto bg-slate-50 dark:bg-slate-950\">",
+          "failureSummary": "Fix any of the following:\n  Element should have focusable content\n  Element should be focusable"
+        }
+      ]
+    }
+  ],
+  "/dashboard/send-money": [],
+  "/dashboard/transactions": [],
+  "/dashboard/beneficiaries": [
+    {
+      "id": "heading-order",
+      "impact": "moderate",
+      "description": "Ensure the order of headings is semantically correct",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.13/heading-order?application=playwright",
+      "page": "http://localhost:3000/dashboard/beneficiaries",
+      "nodes": [
+        {
+          "target": [
+            "h3"
+          ],
+          "html": "<h3 class=\"font-semibold text-slate-900 dark:text-white mb-1\">Add a Beneficiary</h3>",
+          "failureSummary": "Fix any of the following:\n  Heading order invalid"
+        }
+      ]
+    }
+  ],
+  "/dashboard/beneficiaries#modal": [
+    {
+      "id": "heading-order",
+      "impact": "moderate",
+      "description": "Ensure the order of headings is semantically correct",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.13/heading-order?application=playwright",
+      "page": "http://localhost:3000/dashboard/beneficiaries",
+      "nodes": [
+        {
+          "target": [
+            "h3"
+          ],
+          "html": "<h3 class=\"font-semibold text-slate-900 dark:text-white mb-1\">Add a Beneficiary</h3>",
+          "failureSummary": "Fix any of the following:\n  Heading order invalid"
+        }
+      ]
+    },
+    {
+      "id": "select-name",
+      "impact": "critical",
+      "description": "Ensure select element has an accessible name",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.13/select-name?application=playwright",
+      "page": "http://localhost:3000/dashboard/beneficiaries",
+      "nodes": [
+        {
+          "target": [
+            "div:nth-child(1) > select"
+          ],
+          "html": "<select class=\"w-full px-4 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm\">",
+          "failureSummary": "Fix any of the following:\n  Element does not have an implicit (wrapped) <label>\n  Element does not have an explicit <label>\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute\n  Element's default semantics were not overridden with role=\"none\" or role=\"presentation\""
+        },
+        {
+          "target": [
+            "div:nth-child(2) > select"
+          ],
+          "html": "<select class=\"w-full px-4 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm\">",
+          "failureSummary": "Fix any of the following:\n  Element does not have an implicit (wrapped) <label>\n  Element does not have an explicit <label>\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute\n  Element's default semantics were not overridden with role=\"none\" or role=\"presentation\""
+        }
+      ]
+    }
+  ],
+  "/dashboard/cards": [
+    {
+      "id": "heading-order",
+      "impact": "moderate",
+      "description": "Ensure the order of headings is semantically correct",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.13/heading-order?application=playwright",
+      "page": "http://localhost:3000/dashboard/cards",
+      "nodes": [
+        {
+          "target": [
+            "h3"
+          ],
+          "html": "<h3 class=\"font-semibold text-slate-900 dark:text-white mb-1\">Add a New Card</h3>",
+          "failureSummary": "Fix any of the following:\n  Heading order invalid"
+        }
+      ]
+    }
+  ],
+  "/dashboard/cards#modal": [
+    {
+      "id": "heading-order",
+      "impact": "moderate",
+      "description": "Ensure the order of headings is semantically correct",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.13/heading-order?application=playwright",
+      "page": "http://localhost:3000/dashboard/cards",
+      "nodes": [
+        {
+          "target": [
+            "h3"
+          ],
+          "html": "<h3 class=\"font-semibold text-slate-900 dark:text-white mb-1\">Add a New Card</h3>",
+          "failureSummary": "Fix any of the following:\n  Heading order invalid"
+        }
+      ]
+    },
+    {
+      "id": "select-name",
+      "impact": "critical",
+      "description": "Ensure select element has an accessible name",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.13/select-name?application=playwright",
+      "page": "http://localhost:3000/dashboard/cards",
+      "nodes": [
+        {
+          "target": [
+            "form > div:nth-child(2) > select"
+          ],
+          "html": "<select class=\"w-full px-4 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm\">",
+          "failureSummary": "Fix any of the following:\n  Element does not have an implicit (wrapped) <label>\n  Element does not have an explicit <label>\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute\n  Element's default semantics were not overridden with role=\"none\" or role=\"presentation\""
+        },
+        {
+          "target": [
+            ".w-1\\/2.px-2:nth-child(1)"
+          ],
+          "html": "<select class=\"w-1/2 px-2 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm\">",
+          "failureSummary": "Fix any of the following:\n  Element does not have an implicit (wrapped) <label>\n  Element does not have an explicit <label>\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute\n  Element's default semantics were not overridden with role=\"none\" or role=\"presentation\""
+        },
+        {
+          "target": [
+            ".w-1\\/2.px-2:nth-child(2)"
+          ],
+          "html": "<select class=\"w-1/2 px-2 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm\">",
+          "failureSummary": "Fix any of the following:\n  Element does not have an implicit (wrapped) <label>\n  Element does not have an explicit <label>\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute\n  Element's default semantics were not overridden with role=\"none\" or role=\"presentation\""
+        }
+      ]
+    }
+  ],
+  "/dashboard/profile": [
+    {
+      "id": "label",
+      "impact": "critical",
+      "description": "Ensure every form element has a label",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.13/label?application=playwright",
+      "page": "http://localhost:3000/dashboard/profile",
+      "nodes": [
+        {
+          "target": [
+            "input[value=\"QAUser20\"]"
+          ],
+          "html": "<input class=\"w-full px-4 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500\" type=\"text\" value=\"QAUser20\">",
+          "failureSummary": "Fix any of the following:\n  Element does not have an implicit (wrapped) <label>\n  Element does not have an explicit <label>\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute\n  Element has no placeholder attribute\n  Element's default semantics were not overridden with role=\"none\" or role=\"presentation\""
+        },
+        {
+          "target": [
+            "input[value=\"Test\"]"
+          ],
+          "html": "<input class=\"w-full px-4 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500\" type=\"text\" value=\"Test\">",
+          "failureSummary": "Fix any of the following:\n  Element does not have an implicit (wrapped) <label>\n  Element does not have an explicit <label>\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute\n  Element has no placeholder attribute\n  Element's default semantics were not overridden with role=\"none\" or role=\"presentation\""
+        },
+        {
+          "target": [
+            ".dark\\:bg-slate-800\\/50"
+          ],
+          "html": "<input disabled=\"\" class=\"w-full px-4 py-2 bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 border border-slate-300 dark:border-slate-700 rounded-lg cursor-not-allowed\" type=\"email\" value=\"qa_1789833409766_26379_20_224@wrightpay-qa.test\">",
+          "failureSummary": "Fix any of the following:\n  Element does not have an implicit (wrapped) <label>\n  Element does not have an explicit <label>\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute\n  Element has no placeholder attribute\n  Element's default semantics were not overridden with role=\"none\" or role=\"presentation\""
+        }
+      ]
+    },
+    {
+      "id": "select-name",
+      "impact": "critical",
+      "description": "Ensure select element has an accessible name",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.13/select-name?application=playwright",
+      "page": "http://localhost:3000/dashboard/profile",
+      "nodes": [
+        {
+          "target": [
+            "select"
+          ],
+          "html": "<select class=\"w-full px-4 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500\">",
+          "failureSummary": "Fix any of the following:\n  Element does not have an implicit (wrapped) <label>\n  Element does not have an explicit <label>\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute\n  Element's default semantics were not overridden with role=\"none\" or role=\"presentation\""
+        }
+      ]
+    }
+  ]
+}

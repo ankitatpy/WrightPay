@@ -22,7 +22,7 @@ describe('TransactionsService', () => {
     fee: 25.0,
     exchangeRate: 90.5,
     status: TransactionStatus.COMPLETED,
-    failureReason: null,
+    failureReason: undefined,
     date: new Date('2026-08-16T10:00:00Z'),
     createdAt: new Date('2026-08-16T10:00:00Z'),
   };
@@ -41,7 +41,7 @@ describe('TransactionsService', () => {
     fee: 25.0,
     exchangeRate: 90.5,
     status: TransactionStatus.PROCESSING,
-    failureReason: null,
+    failureReason: undefined,
     date: new Date('2026-08-15T10:00:00Z'),
     createdAt: new Date('2026-08-15T10:00:00Z'),
   };

@@ -15,6 +15,9 @@ import { BeneficiariesPage } from '../pages/beneficiaries.page';
 import { CardsPage } from '../pages/cards.page';
 import { SendMoneyPage } from '../pages/send-money.page';
 import { TransactionsPage } from '../pages/transactions.page';
+import { ProfilePage } from '../pages/profile.page';
+import { WalletsPage } from '../pages/wallets.page';
+import { UsersApi } from '../api/users.api';
 import { config } from '../config/env.config';
 
 export interface ProvisionedUser {
@@ -34,6 +37,8 @@ export interface UiFixtures {
   cardsPage: CardsPage;
   sendMoneyPage: SendMoneyPage;
   transactionsPage: TransactionsPage;
+  profilePage: ProfilePage;
+  walletsPage: WalletsPage;
   createTestUser: (overrides?: Partial<TestUserData>) => Promise<ProvisionedUser>;
   authenticatedUser: {
     page: Page;
@@ -43,6 +48,8 @@ export interface UiFixtures {
     cardsPage: CardsPage;
     sendMoneyPage: SendMoneyPage;
     transactionsPage: TransactionsPage;
+    profilePage: ProfilePage;
+    walletsPage: WalletsPage;
     apiContext: APIRequestContext;
     beneficiariesApi: BeneficiariesApi;
     cardsApi: CardsApi;
@@ -50,6 +57,7 @@ export interface UiFixtures {
     walletApi: WalletApi;
     transactionsApi: TransactionsApi;
     exchangeRatesApi: ExchangeRatesApi;
+    usersApi: UsersApi;
   };
 }
 
@@ -88,6 +96,14 @@ export const test = base.extend<UiFixtures>({
 
   transactionsPage: async ({ page }, use) => {
     await use(new TransactionsPage(page));
+  },
+
+  profilePage: async ({ page }, use) => {
+    await use(new ProfilePage(page));
+  },
+
+  walletsPage: async ({ page }, use) => {
+    await use(new WalletsPage(page));
   },
 
   createTestUser: async ({ playwright }, use) => {
@@ -162,6 +178,8 @@ export const test = base.extend<UiFixtures>({
     const cardsPage = new CardsPage(page);
     const sendMoneyPage = new SendMoneyPage(page);
     const transactionsPage = new TransactionsPage(page);
+    const profilePage = new ProfilePage(page);
+    const walletsPage = new WalletsPage(page);
 
     const beneficiariesApi = new BeneficiariesApi(userApiContext);
     const cardsApi = new CardsApi(userApiContext);
@@ -169,6 +187,7 @@ export const test = base.extend<UiFixtures>({
     const walletApi = new WalletApi(userApiContext);
     const transactionsApi = new TransactionsApi(userApiContext);
     const exchangeRatesApi = new ExchangeRatesApi(userApiContext);
+    const usersApi = new UsersApi(userApiContext);
 
     await use({
       page,
@@ -178,6 +197,8 @@ export const test = base.extend<UiFixtures>({
       cardsPage,
       sendMoneyPage,
       transactionsPage,
+      profilePage,
+      walletsPage,
       apiContext: userApiContext,
       beneficiariesApi,
       cardsApi,
@@ -185,6 +206,7 @@ export const test = base.extend<UiFixtures>({
       walletApi,
       transactionsApi,
       exchangeRatesApi,
+      usersApi,
     });
 
     await userApiContext.dispose();

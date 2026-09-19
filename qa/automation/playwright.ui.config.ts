@@ -6,6 +6,12 @@ import { config } from './config/env.config';
  */
 export default defineConfig({
   testDir: './tests/ui',
+  testIgnore: [
+    ...(process.argv.some((arg) => arg.includes('accessibility')) ? [] : ['**/accessibility/**']),
+    ...(process.argv.some((arg) => arg.includes('responsive')) ? [] : ['**/responsive/**']),
+    ...(process.argv.some((arg) => arg.includes('errors')) ? [] : ['**/errors/**']),
+    ...(process.argv.some((arg) => arg.includes('session')) ? [] : ['**/session/session-expiry.spec.ts']),
+  ],
   timeout: config.timeout || 30000,
   expect: {
     timeout: 5000,

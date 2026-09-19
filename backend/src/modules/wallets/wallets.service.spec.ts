@@ -102,5 +102,41 @@ describe('WalletsService', () => {
         NotFoundException,
       );
     });
+
+    it('should fallback to non-default wallet if isDefault wallet is not found', async () => {
+      mockWalletRepository.findOne
+        .mockResolvedValueOnce(null) // first lookup { userId, isDefault: true }
+        .mockResolvedValueOnce({
+          id: 'non-default-wallet-id',
+          userId: 'user-secondary',
+          currency: Currency.GBP,
+          balance: 50.0,
+          isDefault: false,
+        }); // second lookup { userId }
+
+      const result = await service.getWalletByUserId('user-secondary');
+      expect(result).toBeDefined();
+      expect(result.id).toBe('non-default-wallet-id');
+      expect(result.currency).toBe(Currency.GBP);
+      expect(result.isDefault).toBe(false);
+    });
+
+    it('should default equivalent to 0 if exchangeRatesService.getRate throws an error', async () => {
+      mockWalletRepository.findOne.mockResolvedValueOnce({
+        id: 'wallet-err',
+        userId: 'user-uuid-1',
+        currency: Currency.EUR,
+        balance: 100,
+        isDefault: true,
+      });
+
+      mockExchangeRatesService.getRate.mockRejectedValueOnce(new Error('Rate service offline'));
+
+      const result = await service.getWalletByUserId('user-uuid-1');
+      expect(result).toBeDefined();
+      // At least one target currency where getRate threw should have equivalent 0
+      expect(Object.values(result.equivalents)).toContain(0);
+    });
   });
 });
+
