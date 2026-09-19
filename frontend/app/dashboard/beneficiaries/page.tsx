@@ -1,29 +1,24 @@
 'use client';
 
-import { useSyncExternalStore, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import DashboardLayout from '@/components/DashboardLayout';
-import { getCurrentMockUser } from '@/lib/mock/auth';
+import { useAuth } from '@/lib/auth-context';
 import {
-  getUserBeneficiaries,
-  addMockBeneficiary,
-  removeMockBeneficiary,
-  MAX_BENEFICIARIES,
-} from '@/lib/mock/beneficiaries';
+  getBeneficiaries,
+  createBeneficiary,
+  deleteBeneficiary,
+} from '@/lib/api/beneficiaries';
 import { formatAccountNumber } from '@/lib/formatting';
-import { BeneficiaryPayoutMethod, Currency } from '@/types';
+import { Beneficiary, BeneficiaryPayoutMethod, Currency } from '@/types';
 
-const subscribe = () => () => {};
+const MAX_BENEFICIARIES = 3;
 
 export default function BeneficiariesPage() {
-  const isMounted = useSyncExternalStore(
-    subscribe,
-    () => true,
-    () => false
-  );
-
-  const user = getCurrentMockUser();
-  const [refreshKey, setRefreshKey] = useState(0);
+  const { user } = useAuth();
+  const [beneficiaries, setBeneficiaries] = useState<Beneficiary[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [pageError, setPageError] = useState<string | null>(null);
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -34,9 +29,49 @@ export default function BeneficiariesPage() {
   const [bankName, setBankName] = useState('');
   const [bankCode, setBankCode] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  // Read current user's beneficiaries
-  const beneficiaries = isMounted ? getUserBeneficiaries(user?.id) : [];
+  const fetchBeneficiaries = () => {
+    setIsLoading(true);
+    setPageError(null);
+    getBeneficiaries()
+      .then((data) => {
+        setBeneficiaries(Array.isArray(data) ? data : []);
+        setIsLoading(false);
+      })
+      .catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : 'Failed to load beneficiaries';
+        setPageError(message);
+        setIsLoading(false);
+      });
+  };
+
+  useEffect(() => {
+    if (!user) return;
+    let isCancelled = false;
+
+    getBeneficiaries()
+      .then((data) => {
+        if (!isCancelled) {
+          setBeneficiaries(Array.isArray(data) ? data : []);
+          setIsLoading(false);
+        }
+      })
+      .catch((err: unknown) => {
+        if (!isCancelled) {
+          const message = err instanceof Error ? err.message : 'Failed to load beneficiaries';
+          setPageError(message);
+          setIsLoading(false);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [user]);
+
+
   const canAddMore = beneficiaries.length < MAX_BENEFICIARIES;
 
   const handleOpenModal = () => {
@@ -55,9 +90,9 @@ export default function BeneficiariesPage() {
     setFormError(null);
   };
 
-  const handleAddSubmit = (e: React.FormEvent) => {
+  const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
+    if (!user || isSubmitting) return;
 
     if (!name.trim()) {
       setFormError('Please enter a beneficiary name.');
@@ -70,35 +105,56 @@ export default function BeneficiariesPage() {
       return;
     }
 
-    const created = addMockBeneficiary({
-      userId: user.id,
-      name,
-      currency,
-      payoutMethod,
-      accountNumber,
-      bankName: bankName.trim() || (payoutMethod === 'upi' ? 'UPI' : 'Bank Account'),
-      bankCode: bankCode.trim() || (payoutMethod === 'upi' ? 'UPI-IND' : 'DIRECT'),
-      upiId: payoutMethod === 'upi' ? accountNumber.trim() : undefined,
-    });
+    try {
+      setIsSubmitting(true);
+      setFormError(null);
 
-    if (!created) {
-      setFormError(`Maximum limit of ${MAX_BENEFICIARIES} beneficiaries reached.`);
-      return;
+      const payload =
+        payoutMethod === 'upi'
+          ? {
+              name: name.trim(),
+              currency,
+              payoutMethod: 'upi' as const,
+              upiId: accountNumber.trim(),
+            }
+          : {
+              name: name.trim(),
+              currency,
+              payoutMethod: 'bank_account' as const,
+              accountNumber: accountNumber.trim(),
+              bankName: bankName.trim() || 'Bank Account',
+              bankCode: bankCode.trim() || 'DIRECT',
+            };
+
+      await createBeneficiary(payload);
+      fetchBeneficiaries();
+      setIsModalOpen(false);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to add beneficiary';
+      setFormError(message);
+    } finally {
+      setIsSubmitting(false);
     }
-
-    setRefreshKey((prev) => prev + 1);
-    setIsModalOpen(false);
   };
 
-  const handleRemove = (beneficiaryId: string) => {
-    if (!user) return;
-    removeMockBeneficiary(user.id, beneficiaryId);
-    setRefreshKey((prev) => prev + 1);
+  const handleRemove = async (beneficiaryId: string) => {
+    if (!user || deletingId) return;
+    try {
+      setDeletingId(beneficiaryId);
+      await deleteBeneficiary(beneficiaryId);
+      setBeneficiaries((prev) => prev.filter((b) => b.id !== beneficiaryId));
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to delete beneficiary';
+      setPageError(message);
+    } finally {
+      setDeletingId(null);
+    }
   };
+
 
   return (
     <DashboardLayout user={user}>
-      <div className="p-8" key={refreshKey}>
+      <div className="p-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Beneficiaries</h1>
           <p className="text-slate-600 dark:text-slate-400 mt-2">
@@ -106,13 +162,32 @@ export default function BeneficiariesPage() {
           </p>
         </div>
 
+        {/* Page Error Banner */}
+        {pageError && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <svg className="w-5 h-5 text-red-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span>{pageError}</span>
+            </div>
+            <button
+              type="button"
+              onClick={fetchBeneficiaries}
+              className="text-xs font-semibold px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-800 rounded transition-colors cursor-pointer"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
         {/* Beneficiary Count */}
         <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm p-6 mb-6 border border-slate-200 dark:border-slate-800 transition-colors">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-slate-600 dark:text-slate-400 text-sm">Saved Beneficiaries</p>
               <p className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
-                {isMounted ? `${beneficiaries.length} of ${MAX_BENEFICIARIES}` : `0 of ${MAX_BENEFICIARIES}`}
+                {!isLoading ? `${beneficiaries.length} of ${MAX_BENEFICIARIES}` : `... of ${MAX_BENEFICIARIES}`}
               </p>
             </div>
             <div className="w-24 h-24">
@@ -138,7 +213,7 @@ export default function BeneficiariesPage() {
                   />
                 </svg>
                 <div className="absolute inset-0 flex items-center justify-center text-xs font-semibold text-slate-900 dark:text-white">
-                  {Math.round((beneficiaries.length / MAX_BENEFICIARIES) * 100)}%
+                  {!isLoading ? Math.round((beneficiaries.length / MAX_BENEFICIARIES) * 100) : 0}%
                 </div>
               </div>
             </div>
@@ -147,7 +222,7 @@ export default function BeneficiariesPage() {
 
         {/* Beneficiaries List */}
         <div className="space-y-4 mb-6">
-          {isMounted && beneficiaries.length > 0 ? (
+          {!isLoading && beneficiaries.length > 0 ? (
             beneficiaries.map((beneficiary) => (
               <div
                 key={beneficiary.id}
@@ -170,10 +245,11 @@ export default function BeneficiariesPage() {
                     </button>
                     <button
                       type="button"
+                      disabled={deletingId === beneficiary.id}
                       onClick={() => handleRemove(beneficiary.id)}
-                      className="px-3 py-1 bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-400 text-sm rounded hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors cursor-pointer"
+                      className="px-3 py-1 bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-400 text-sm rounded hover:bg-red-100 dark:hover:bg-red-900/50 disabled:opacity-50 transition-colors cursor-pointer"
                     >
-                      Remove
+                      {deletingId === beneficiary.id ? 'Removing...' : 'Remove'}
                     </button>
                   </div>
                 </div>
@@ -185,7 +261,7 @@ export default function BeneficiariesPage() {
                     </p>
                     <p className="font-mono text-slate-900 dark:text-slate-200">
                       {beneficiary.payoutMethod === 'upi'
-                        ? beneficiary.accountNumber
+                        ? (beneficiary.upiId || beneficiary.accountNumber)
                         : formatAccountNumber(beneficiary.accountNumber)}
                     </p>
                   </div>
@@ -203,7 +279,7 @@ export default function BeneficiariesPage() {
                 </Link>
               </div>
             ))
-          ) : isMounted ? (
+          ) : !isLoading ? (
             <div className="bg-white dark:bg-slate-900 rounded-lg p-8 text-center border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400">
               No beneficiaries saved yet. Click below to add your first beneficiary.
             </div>
@@ -213,7 +289,7 @@ export default function BeneficiariesPage() {
         </div>
 
         {/* Add Beneficiary Card */}
-        {isMounted && canAddMore && (
+        {!isLoading && canAddMore && (
           <div className="bg-blue-50 dark:bg-blue-950/30 border-2 border-dashed border-blue-300 dark:border-blue-800/80 rounded-lg p-6 text-center transition-colors">
             <svg
               className="w-12 h-12 text-blue-600 dark:text-blue-400 mx-auto mb-3"
@@ -243,13 +319,14 @@ export default function BeneficiariesPage() {
           </div>
         )}
 
-        {isMounted && !canAddMore && (
+        {!isLoading && !canAddMore && (
           <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-lg p-4">
             <p className="text-sm text-amber-800 dark:text-amber-300">
               You have reached the maximum of {MAX_BENEFICIARIES} beneficiaries. Remove one to add another.
             </p>
           </div>
         )}
+
 
         {/* Add Beneficiary Modal */}
         {isModalOpen && (

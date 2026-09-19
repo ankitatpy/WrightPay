@@ -3,10 +3,11 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { mockLogin } from '@/lib/mock/auth';
+import { useAuth } from '@/lib/auth-context';
 
 export default function LoginPage() {
   const router = useRouter();
+  const { login } = useAuth();
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -33,7 +34,7 @@ export default function LoginPage() {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setErrorMessage('');
 
@@ -51,15 +52,16 @@ export default function LoginPage() {
     }
 
     setIsLoading(true);
-    const result = mockLogin(formData.email, formData.password);
+    const result = await login(formData.email, formData.password);
     setIsLoading(false);
 
     if (result.success) {
       router.push('/dashboard');
     } else {
-      setErrorMessage(result.message || 'Login failed. Please check your credentials.');
+      setErrorMessage(result.error || 'Login failed. Please check your credentials.');
     }
   };
+
 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">

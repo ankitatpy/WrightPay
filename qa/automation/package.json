@@ -1,0 +1,29 @@
+{
+  "name": "wrightpay-qa-automation",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Playwright Test automation framework for WrightPay",
+  "scripts": {
+    "test": "playwright test",
+    "test:baseline": "playwright test",
+    "test:defects": "playwright test --config=playwright.defects.config.ts",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --config=playwright.ui.config.ts",
+    "test:ui:smoke": "playwright test --config=playwright.ui.config.ts tests/ui/smoke",
+    "test:ui:interactive": "playwright test --config=playwright.ui.config.ts --ui",
+    "test:report": "playwright show-report reports/html-report",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "bullmq": "^5.41.0",
+    "ioredis": "^5.5.0",
+    "pg": "^8.13.3"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.50.1",
+    "@types/node": "^22.13.4",
+    "@types/pg": "^8.11.11",
+    "dotenv": "^16.4.7",
+    "typescript": "^5.7.3"
+  }
+}

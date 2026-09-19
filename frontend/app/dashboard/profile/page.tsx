@@ -1,24 +1,130 @@
 'use client';
 
-import { useSyncExternalStore } from 'react';
+import { useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
-import { getCurrentMockUser } from '@/lib/mock/auth';
+import { useAuth } from '@/lib/auth-context';
+import { updateMe } from '@/lib/api/users';
 import { useTheme } from '@/lib/theme-context';
+import { Currency } from '@/types';
 
-const subscribe = () => () => {};
+function ProfileForm({
+  user,
+  refreshUser,
+}: {
+  user: NonNullable<ReturnType<typeof useAuth>['user']>;
+  refreshUser: () => Promise<unknown>;
+}) {
+
+  const parts = (user.name || '').trim().split(' ');
+  const [firstName, setFirstName] = useState(parts[0] || '');
+  const [lastName, setLastName] = useState(parts.slice(1).join(' ') || '');
+  const [defaultCurrency, setDefaultCurrency] = useState<Currency>(user.defaultCurrency || 'EUR');
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const handleSaveChanges = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isSaving) return;
+
+    try {
+      setIsSaving(true);
+      setSaveSuccess(false);
+      setSaveError(null);
+
+      const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
+      await updateMe({
+        name: fullName || user.name,
+        defaultCurrency,
+      });
+
+      await refreshUser();
+      setSaveSuccess(true);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to update profile';
+      setSaveError(message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <form
+      onSubmit={handleSaveChanges}
+      className="bg-white dark:bg-slate-900 rounded-lg shadow-sm p-6 mb-6 border border-slate-200 dark:border-slate-800 transition-colors"
+    >
+      <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">Personal Information</h3>
+
+      {saveSuccess && (
+        <div className="mb-4 p-3 bg-green-50 dark:bg-green-950/40 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-300 rounded text-sm">
+          Profile updated successfully.
+        </div>
+      )}
+
+      {saveError && (
+        <div className="mb-4 p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 rounded text-sm">
+          {saveError}
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-slate-900 dark:text-slate-200 mb-2">First Name</label>
+          <input
+            type="text"
+            value={firstName}
+            onChange={(e) => setFirstName(e.target.value)}
+            className="w-full px-4 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-900 dark:text-slate-200 mb-2">Last Name</label>
+          <input
+            type="text"
+            value={lastName}
+            onChange={(e) => setLastName(e.target.value)}
+            className="w-full px-4 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+        <div className="col-span-2">
+          <label className="block text-sm font-medium text-slate-900 dark:text-slate-200 mb-2">Email</label>
+          <input
+            type="email"
+            disabled
+            value={user.email || ''}
+            className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 border border-slate-300 dark:border-slate-700 rounded-lg cursor-not-allowed"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-900 dark:text-slate-200 mb-2">Default Currency</label>
+          <select
+            value={defaultCurrency}
+            onChange={(e) => setDefaultCurrency(e.target.value as Currency)}
+            className="w-full px-4 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="EUR">EUR</option>
+            <option value="GBP">GBP</option>
+            <option value="USD">USD</option>
+            <option value="AED">AED</option>
+            <option value="PLN">PLN</option>
+            <option value="INR">INR</option>
+          </select>
+        </div>
+      </div>
+      <button
+        type="submit"
+        disabled={isSaving}
+        className="mt-4 bg-blue-600 text-white font-medium px-6 py-2 rounded hover:bg-blue-700 disabled:bg-blue-400 transition-colors cursor-pointer text-sm"
+      >
+        {isSaving ? 'Saving...' : 'Save Changes'}
+      </button>
+    </form>
+  );
+}
 
 export default function ProfilePage() {
-  const isMounted = useSyncExternalStore(
-    subscribe,
-    () => true,
-    () => false
-  );
   const { theme, toggleTheme } = useTheme();
-  const user = getCurrentMockUser();
-
-  const nameParts = (isMounted ? user?.name || '' : '').trim().split(' ');
-  const firstName = nameParts[0] || '';
-  const lastName = nameParts.slice(1).join(' ') || '';
+  const { user, refreshUser } = useAuth();
 
   return (
     <DashboardLayout user={user}>
@@ -33,15 +139,15 @@ export default function ProfilePage() {
           <div className="flex items-center gap-6 mb-6">
             <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center shadow-sm">
               <span className="text-2xl font-bold text-white">
-                {isMounted && user?.name ? user.name.charAt(0) : ''}
+                {user?.name ? user.name.charAt(0).toUpperCase() : 'U'}
               </span>
             </div>
             <div>
               <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
-                {isMounted ? (user?.name || 'User') : ''}
+                {user?.name || 'User'}
               </h2>
               <p className="text-slate-600 dark:text-slate-400">
-                {isMounted ? user?.email : ''}
+                {user?.email || ''}
               </p>
             </div>
           </div>
@@ -82,56 +188,13 @@ export default function ProfilePage() {
         </div>
 
         {/* Personal Information */}
-        <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm p-6 mb-6 border border-slate-200 dark:border-slate-800 transition-colors">
-          <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">Personal Information</h3>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-900 dark:text-slate-200 mb-2">First Name</label>
-              <input
-                type="text"
-                key={user?.id + '-fn'}
-                defaultValue={firstName}
-                className="w-full px-4 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-900 dark:text-slate-200 mb-2">Last Name</label>
-              <input
-                type="text"
-                key={user?.id + '-ln'}
-                defaultValue={lastName}
-                className="w-full px-4 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div className="col-span-2">
-              <label className="block text-sm font-medium text-slate-900 dark:text-slate-200 mb-2">Email</label>
-              <input
-                type="email"
-                key={user?.id + '-email'}
-                defaultValue={isMounted ? user?.email || '' : ''}
-                className="w-full px-4 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-900 dark:text-slate-200 mb-2">Default Currency</label>
-              <select
-                key={user?.id + '-currency'}
-                defaultValue={isMounted ? user?.defaultCurrency || 'EUR' : 'EUR'}
-                className="w-full px-4 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="EUR">EUR</option>
-                <option value="GBP">GBP</option>
-                <option value="USD">USD</option>
-                <option value="AED">AED</option>
-                <option value="PLN">PLN</option>
-                <option value="INR">INR</option>
-              </select>
-            </div>
-          </div>
-          <button className="mt-4 bg-blue-600 text-white font-medium px-6 py-2 rounded hover:bg-blue-700 transition-colors cursor-pointer text-sm">
-            Save Changes
-          </button>
-        </div>
+        {user ? (
+          <ProfileForm key={user.id} user={user} refreshUser={refreshUser} />
+        ) : (
+          <div className="h-64 bg-slate-100 dark:bg-slate-800 animate-pulse rounded-lg mb-6" />
+        )}
+
+
 
         {/* Security */}
         <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm p-6 mb-6 border border-slate-200 dark:border-slate-800 transition-colors">

@@ -1,45 +1,119 @@
 'use client';
 
-import { useSyncExternalStore } from 'react';
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import DashboardLayout from '@/components/DashboardLayout';
 import WalletCard from '@/components/WalletCard';
 import ExchangeRateBanner from '@/components/ExchangeRateBanner';
 import StatusBadge from '@/components/StatusBadge';
-import { getCurrentMockUser } from '@/lib/mock/auth';
-import { getUserTransactions } from '@/lib/mock/transactions';
-import { getUserWallet, getCurrencyEquivalents } from '@/lib/mock/wallets';
+import { useAuth } from '@/lib/auth-context';
+import { getTransactions } from '@/lib/api/transactions';
+import { getMyWallet, transformWalletEquivalents } from '@/lib/api/wallets';
 import { formatCurrency, formatDate } from '@/lib/formatting';
-import Link from 'next/link';
-
-const subscribe = () => () => {};
+import { WalletResponse, Transaction } from '@/types';
 
 export default function DashboardPage() {
-  const isMounted = useSyncExternalStore(
-    subscribe,
-    () => true,
-    () => false
-  );
+  const { user } = useAuth();
+  const [wallet, setWallet] = useState<WalletResponse | null>(null);
+  const [isLoadingWallet, setIsLoadingWallet] = useState<boolean>(true);
+  const [walletError, setWalletError] = useState<string | null>(null);
 
-  const user = getCurrentMockUser();
-  const userWallet = getUserWallet(user);
-  const currencyEquivalents = getCurrencyEquivalents(userWallet);
-  const recentTransactions = isMounted ? getUserTransactions(user?.id).slice(0, 3) : [];
+  const [recentTransactions, setRecentTransactions] = useState<Transaction[]>([]);
+  const [isLoadingTransactions, setIsLoadingTransactions] = useState<boolean>(true);
+
+  useEffect(() => {
+    if (!user) return;
+    let isCancelled = false;
+
+    getMyWallet()
+      .then((data) => {
+        if (!isCancelled) {
+          setWallet(data);
+          setWalletError(null);
+          setIsLoadingWallet(false);
+        }
+      })
+      .catch((err: unknown) => {
+        if (!isCancelled) {
+          const message = err instanceof Error ? err.message : 'Failed to load wallet data.';
+          setWalletError(message);
+          setIsLoadingWallet(false);
+        }
+      });
+
+    getTransactions({ limit: 3 })
+      .then((res) => {
+        if (!isCancelled) {
+          setRecentTransactions(res.items);
+          setIsLoadingTransactions(false);
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to load recent transactions:', err);
+        if (!isCancelled) {
+          setIsLoadingTransactions(false);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [user]);
+
+  const handleRetry = () => {
+    setIsLoadingWallet(true);
+    setWalletError(null);
+    getMyWallet()
+      .then((data) => {
+        setWallet(data);
+        setIsLoadingWallet(false);
+      })
+      .catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : 'Failed to load wallet data.';
+        setWalletError(message);
+        setIsLoadingWallet(false);
+      });
+  };
+
+  const currencyEquivalents = wallet ? transformWalletEquivalents(wallet) : [];
+
+
 
   return (
     <DashboardLayout user={user}>
       <ExchangeRateBanner />
 
       <div className="p-8 space-y-8">
+        {/* Wallet Error Banner */}
+        {walletError && (
+          <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <svg className="w-5 h-5 text-red-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span>{walletError}</span>
+            </div>
+            <button
+              type="button"
+              onClick={handleRetry}
+              className="text-xs font-semibold px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-800 rounded transition-colors cursor-pointer"
+            >
+              Retry
+            </button>
+
+          </div>
+        )}
+
         {/* Total Available Balance */}
         <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm p-8 border border-slate-200 dark:border-slate-800 transition-colors">
           <p className="text-slate-600 dark:text-slate-400 text-sm font-medium mb-2">Total Available Balance</p>
-          {isMounted ? (
+          {!isLoadingWallet && wallet ? (
             <>
               <h1 className="text-4xl font-bold text-slate-900 dark:text-white">
-                {formatCurrency(userWallet.balance, userWallet.currency)}
+                {formatCurrency(wallet.balance, wallet.currency)}
               </h1>
               <p className="text-slate-600 dark:text-slate-400 text-sm mt-2">
-                Available funding balance in {userWallet.currency}
+                Available funding balance in {wallet.currency}
               </p>
             </>
           ) : (
@@ -56,8 +130,8 @@ export default function DashboardPage() {
             <div>
               <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Currency Equivalents</h2>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                {isMounted
-                  ? `Estimated conversion value of your ${userWallet.currency} balance across supported currencies`
+                {!isLoadingWallet && wallet
+                  ? `Estimated conversion value of your ${wallet.currency} balance across supported currencies`
                   : 'Estimated conversion value across supported currencies'}
               </p>
             </div>
@@ -69,9 +143,9 @@ export default function DashboardPage() {
             </Link>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {isMounted
-              ? currencyEquivalents.map((wallet) => (
-                  <WalletCard key={wallet.id} wallet={wallet} />
+            {!isLoadingWallet && wallet
+              ? currencyEquivalents.map((item) => (
+                  <WalletCard key={item.id} wallet={item} />
                 ))
               : Array.from({ length: 6 }).map((_, i) => (
                   <div
@@ -81,6 +155,7 @@ export default function DashboardPage() {
                 ))}
           </div>
         </div>
+
 
         {/* Quick Action */}
         <div className="bg-blue-50 dark:bg-blue-950/40 rounded-lg p-8 border border-blue-100 dark:border-blue-900/50 transition-colors">
@@ -155,10 +230,11 @@ export default function DashboardPage() {
                   ) : (
                     <tr>
                       <td colSpan={5} className="px-6 py-8 text-center text-slate-500 dark:text-slate-400 text-sm">
-                        {isMounted ? 'No recent transactions' : 'Loading transactions...'}
+                        {isLoadingTransactions ? 'Loading transactions...' : 'No recent transactions'}
                       </td>
                     </tr>
                   )}
+
                 </tbody>
               </table>
             </div>
